@@ -1,0 +1,501 @@
+import express from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import crypto from 'node:crypto';
+import { TelegramClient } from 'telegram';
+import { StringSession } from 'telegram/sessions';
+import { initDb, getDb } from './models';
+
+dotenv.config();
+
+const app = express();
+app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
+app.use(express.json());
+
+const PORT = process.env.PORT || 5000;
+const apiId = Number(process.env.API_ID);
+const apiHash = process.env.API_HASH;
+const SESSION_COOKIE = 'tg_session_token';
+const SESSION_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
+
+if (!process.env.API_ID || !apiHash) {
+  throw new Error('API_ID and API_HASH are required in .env');
+}
+
+if (!Number.isFinite(apiId) || apiId <= 0) {
+  throw new Error('API_ID must be a valid positive number');
+}
+
+let client: TelegramClient | null = null;
+let activeSessionToken: string | null = null;
+
+const getErrorMessage = (error: unknown) => {
+  return error instanceof Error ? error.message : 'Unknown error';
+};
+
+const parseCookies = (cookieHeader: string | undefined) => {
+  const cookies: Record<string, string> = {};
+
+  if (!cookieHeader) return cookies;
+
+  cookieHeader.split(';').forEach(cookie => {
+    const [rawName, ...rawValue] = cookie.trim().split('=');
+    if (rawName) {
+      cookies[rawName] = rawValue.join('=');
+    }
+  });
+
+  return cookies;
+};
+
+const getSessionToken = (req: express.Request) => {
+  return parseCookies(req.headers.cookie)[SESSION_COOKIE] || null;
+};
+
+const setSessionCookie = (res: express.Response, token: string) => {
+  res.setHeader(
+    'Set-Cookie',
+    `${SESSION_COOKIE}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_COOKIE_MAX_AGE_SECONDS}`
+  );
+};
+
+const clearSessionCookie = (res: express.Response) => {
+  res.setHeader(
+    'Set-Cookie',
+    `${SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`
+  );
+};
+
+const getActiveClient = async (res: express.Response): Promise<TelegramClient | null> => {
+  if (!client || !activeSessionToken) {
+    res.status(401).json({ error: 'Not authenticated' });
+    return null;
+  }
+
+  return client;
+};
+
+app.post('/api/auth/send-code', async (req, res) => {
+  const phone = typeof req.body.phone === 'string' ? req.body.phone.trim() : '';
+
+  if (phone.length < 8) {
+    return res.status(400).json({ error: 'Valid phone number is required' });
+  }
+
+  try {
+    const stringSession = new StringSession('');
+    const nextClient = new TelegramClient(stringSession, apiId, apiHash, { connectionRetries: 5 });
+    await nextClient.connect();
+
+    await nextClient.sendCode({ apiId, apiHash }, phone);
+    client = nextClient;
+    activeSessionToken = null;
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(400).json({ error: getErrorMessage(error) });
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  const phone = typeof req.body.phone === 'string' ? req.body.phone.trim() : '';
+  const code = typeof req.body.code === 'string' ? req.body.code.trim() : '';
+
+  if (!phone) {
+    return res.status(400).json({ error: 'Phone number is required' });
+  }
+
+  if (!code) {
+    return res.status(400).json({ error: 'Code is required' });
+  }
+
+  if (!client) {
+    return res.status(400).json({ error: 'Send OTP first' });
+  }
+
+  try {
+    await client.signInUser(
+      { apiId, apiHash },
+      {
+        phoneNumber: async () => phone,
+        phoneCode: async () => code,
+        password: async () => '',
+        onError: (err) => console.log(err)
+      }
+    );
+
+    const sessionString = (client.session as StringSession).save() as string;
+    const me = await client.getMe();
+
+    if (!me) {
+      return res.status(401).json({ error: 'Invalid session' });
+    }
+
+    const sessionToken = crypto.randomUUID();
+    const db = getDb();
+    const user = await db.get('SELECT * FROM users WHERE phoneNumber = ?', phone);
+
+    if (!user) {
+      await db.run(
+        'INSERT INTO users (phoneNumber, sessionString, sessionToken) VALUES (?, ?, ?)',
+        phone,
+        sessionString,
+        sessionToken
+      );
+    } else {
+      await db.run(
+        'UPDATE users SET sessionString = ?, sessionToken = ? WHERE phoneNumber = ?',
+        sessionString,
+        sessionToken,
+        phone
+      );
+    }
+
+    activeSessionToken = sessionToken;
+    setSessionCookie(res, sessionToken);
+
+    if (!isCampaignRunning) resumeCampaigns();
+
+    res.json({
+      success: true,
+      user: me.username || me.firstName || 'User'
+    });
+  } catch (error) {
+    res.status(400).json({ error: getErrorMessage(error) });
+  }
+});
+
+app.post('/api/auth/init', async (req, res) => {
+  const sessionToken = getSessionToken(req);
+
+  if (!sessionToken) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+
+  try {
+    const db = getDb();
+    const user = await db.get('SELECT * FROM users WHERE sessionToken = ?', sessionToken);
+
+    if (!user || !user.sessionString) {
+      return res.status(401).json({ error: 'Invalid session' });
+    }
+
+    const stringSession = new StringSession(user.sessionString);
+    const nextClient = new TelegramClient(stringSession, apiId, apiHash, { connectionRetries: 5 });
+    await nextClient.connect();
+
+    const me = await nextClient.getMe();
+
+    if (!me) {
+      return res.status(401).json({ error: 'Invalid session' });
+    }
+
+    client = nextClient;
+    activeSessionToken = sessionToken;
+
+    if (!isCampaignRunning) resumeCampaigns();
+
+    res.json({
+      success: true,
+      user: me.username || me.firstName || 'User'
+    });
+  } catch (error) {
+    res.status(401).json({ error: getErrorMessage(error) });
+  }
+});
+
+app.post('/api/auth/logout', async (req, res) => {
+  client = null;
+  activeSessionToken = null;
+  clearSessionCookie(res);
+  res.json({ success: true });
+});
+
+app.get('/api/telegram/groups', async (req, res) => {
+  const activeClient = await getActiveClient(res);
+  if (!activeClient) return;
+
+  try {
+    const dialogs = await activeClient.getDialogs({});
+    const groups = dialogs.filter(d => d.isGroup || d.isChannel);
+    res.json({ groups: groups.map(g => ({ id: g.id?.toString(), title: g.title })) });
+  } catch (error) {
+    res.status(500).json({ error: getErrorMessage(error) });
+  }
+});
+
+app.post('/api/telegram/members', async (req, res) => {
+  const activeClient = await getActiveClient(res);
+  if (!activeClient) return;
+
+  try {
+    const rawGroupIds: unknown[] = Array.isArray(req.body.groupIds)
+      ? req.body.groupIds
+      : req.body.groupId
+        ? [req.body.groupId]
+        : [];
+
+    const ids = rawGroupIds.filter((id): id is string => typeof id === 'string' && id.trim().length > 0);
+
+    if (ids.length === 0) {
+      return res.status(400).json({ error: 'Select at least one group' });
+    }
+
+    let allMembers: Array<{ id: string; username?: string; firstName?: string }> = [];
+
+    for (const id of ids) {
+      const participants = await activeClient.getParticipants(id, { limit: 5000 });
+      const members = participants.map(p => ({
+        id: p.id?.toString() || '',
+        username: p.username,
+        firstName: p.firstName
+      })).filter(member => member.id.length > 0);
+
+      allMembers = [...allMembers, ...members];
+    }
+
+    const uniqueMembers = Array.from(new Map(allMembers.map(item => [item.id, item])).values());
+    
+    const db = getDb();
+    const sentUsersRecords = await db.all('SELECT userId FROM sent_users');
+    const sentUserIds = new Set(sentUsersRecords.map(r => r.userId));
+
+    const finalMembers = uniqueMembers.filter(m => !sentUserIds.has(m.id));
+
+    res.json({ members: finalMembers });
+  } catch (error) {
+    res.status(500).json({ error: getErrorMessage(error) });
+  }
+});
+
+let currentCampaign: {
+  dbId: number;
+  message: string;
+  users: string[];
+  sent: number;
+  failed: number;
+  baseDelay: number;
+} | null = null;
+let isCampaignRunning = false;
+
+app.post('/api/campaign/start', async (req, res) => {
+  const activeClient = await getActiveClient(res);
+  if (!activeClient) return;
+
+  const messageText = typeof req.body.message === 'string' ? req.body.message.trim() : '';
+  const rawUsers: unknown[] = Array.isArray(req.body.users) ? req.body.users : [];
+  const users = Array.from(new Set(rawUsers.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)));
+  const totalTimeHours = Number(req.body.totalTimeHours);
+
+  if (!messageText) {
+    return res.status(400).json({ error: 'Message is required' });
+  }
+
+  if (users.length === 0) {
+    return res.status(400).json({ error: 'Users are required' });
+  }
+
+  if (!Number.isFinite(totalTimeHours) || totalTimeHours <= 0) {
+    return res.status(400).json({ error: 'Valid duration in hours is required' });
+  }
+
+  const totalUsers = users.length;
+  const totalTimeSeconds = Math.max(1, Math.round(totalTimeHours * 3600));
+  const baseDelay = totalTimeSeconds / totalUsers;
+
+  try {
+    const db = getDb();
+    const result = await db.run(
+      'INSERT INTO campaigns (message, status, totalUsers, estimatedTime, remainingUsers, baseDelay) VALUES (?, ?, ?, ?, ?, ?)',
+      messageText,
+      'Sending',
+      totalUsers,
+      totalTimeSeconds,
+      JSON.stringify(users),
+      baseDelay
+    );
+
+    if (result.lastID === undefined) {
+      return res.status(500).json({ error: 'Failed to create campaign' });
+    }
+
+    currentCampaign = {
+      dbId: result.lastID,
+      message: messageText,
+      users,
+      sent: 0,
+      failed: 0,
+      baseDelay
+    };
+    isCampaignRunning = true;
+
+    res.json({ success: true, campaignId: result.lastID });
+
+    runCampaign();
+  } catch (error) {
+    res.status(500).json({ error: getErrorMessage(error) });
+  }
+});
+
+app.post('/api/campaign/stop', async (req, res) => {
+  isCampaignRunning = false;
+
+  if (currentCampaign) {
+    const db = getDb();
+    await db.run('UPDATE campaigns SET status = ? WHERE id = ?', 'Stopped', currentCampaign.dbId);
+  }
+
+  res.json({ success: true });
+});
+
+app.post('/api/campaign/update-message', async (req, res) => {
+  const messageText = typeof req.body.message === 'string' ? req.body.message.trim() : '';
+
+  if (!messageText) {
+    return res.status(400).json({ error: 'Message is required' });
+  }
+
+  if (currentCampaign) {
+    currentCampaign.message = messageText;
+    const db = getDb();
+    await db.run('UPDATE campaigns SET message = ? WHERE id = ?', messageText, currentCampaign.dbId);
+  }
+
+  res.json({ success: true });
+});
+
+app.get('/api/campaign/status', async (req, res) => {
+  if (!currentCampaign) return res.json({ status: null });
+
+  const db = getDb();
+  const c = await db.get('SELECT * FROM campaigns WHERE id = ?', currentCampaign.dbId);
+  res.json({ status: c });
+});
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+function antiBanSpin(text: string): string {
+  const homoglyphs: Record<string, string[]> = {
+      'a': ['а'], 'c': ['с'], 'e': ['е'], 'o': ['о'], 
+      'p': ['р'], 'x': ['х'], 'y': ['у'], 'i': ['і']
+  };
+  
+  let result = '';
+  let inUrl = false;
+  
+  for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      
+      if (text.substring(i, i + 4) === 'http' || text.substring(i, i + 4) === 'www.' || text.substring(i, i + 4) === 't.me') {
+          inUrl = true;
+      }
+      if (inUrl && (char === ' ' || char === '\n' || char === '\t')) {
+          inUrl = false;
+      }
+
+      if (!inUrl && homoglyphs[char] && Math.random() > 0.4) {
+          const options = homoglyphs[char];
+          result += options[Math.floor(Math.random() * options.length)];
+      } else {
+          result += char;
+      }
+  }
+  
+  const lines = result.split('\n');
+  const spinnedLines = lines.map(line => {
+      if (line.includes('http') || line.includes('www.') || line.includes('t.me')) return line;
+      
+      const words = line.split(' ');
+      return words.map(w => {
+          if (w.trim() !== '' && Math.random() > 0.6) {
+              const zws = ['\u200B', '\u200C', '\u200D'];
+              return w + zws[Math.floor(Math.random() * zws.length)];
+          }
+          return w;
+      }).join(' ');
+  });
+  
+  let finalMsg = spinnedLines.join('\n');
+  
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let randomId = '';
+  for (let i = 0; i < 6; i++) {
+      randomId += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  
+  finalMsg += `\n\n\u200C[#${randomId}]`;
+  
+  return finalMsg;
+}
+
+async function runCampaign() {
+  const activeClient = client;
+  if (!activeClient || !currentCampaign) return;
+
+  const campaign = currentCampaign;
+  const db = getDb();
+
+  while (isCampaignRunning && campaign.users.length > 0) {
+    const userId = campaign.users.shift();
+    if (!userId) continue;
+
+    try {
+      const uniqueMessage = antiBanSpin(campaign.message);
+      await activeClient.sendMessage(userId, { message: uniqueMessage });
+      campaign.sent++;
+      await db.run('INSERT OR IGNORE INTO sent_users (userId) VALUES (?)', userId);
+    } catch (error) {
+      console.error('Failed to send to', userId, error);
+      campaign.failed++;
+    }
+
+    await db.run(
+      'UPDATE campaigns SET sentCount = ?, failedCount = ?, status = ?, remainingUsers = ? WHERE id = ?',
+      campaign.sent,
+      campaign.failed,
+      campaign.users.length === 0 ? 'Completed' : 'Sending',
+      JSON.stringify(campaign.users),
+      campaign.dbId
+    );
+
+    if (campaign.users.length === 0) {
+      isCampaignRunning = false;
+      break;
+    }
+
+    const delay = campaign.baseDelay * 1000 + (Math.random() * 10000 - 5000);
+    await sleep(Math.max(1000, delay));
+  }
+}
+
+async function resumeCampaigns() {
+  const db = getDb();
+  const activeDbCampaign = await db.get('SELECT * FROM campaigns WHERE status = ? ORDER BY id DESC', 'Sending');
+  if (activeDbCampaign && activeDbCampaign.remainingUsers) {
+      try {
+        const remaining = JSON.parse(activeDbCampaign.remainingUsers);
+        if (remaining.length > 0) {
+            currentCampaign = {
+                dbId: activeDbCampaign.id,
+                message: activeDbCampaign.message,
+                users: remaining,
+                sent: activeDbCampaign.sentCount || 0,
+                failed: activeDbCampaign.failedCount || 0,
+                baseDelay: activeDbCampaign.baseDelay || ((activeDbCampaign.estimatedTime || 3600) / (activeDbCampaign.totalUsers || 1))
+            };
+            isCampaignRunning = true;
+            console.log('Resuming campaign from DB', currentCampaign.dbId);
+            runCampaign();
+        }
+      } catch (e) {
+        console.error('Failed to resume campaign', e);
+      }
+  }
+}
+
+initDb().then(() => {
+  console.log('SQLite DB initialized');
+  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+  setInterval(() => {}, 1000 * 60 * 60);
+}).catch(console.error);
