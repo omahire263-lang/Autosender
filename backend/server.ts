@@ -305,6 +305,7 @@ app.post('/api/campaign/start', async (req, res) => {
   const totalTimeHours = Number(req.body.totalTimeHours);
   const manualDelaySeconds = Number(req.body.manualDelaySeconds);
   const isManual = req.body.manualDelaySeconds !== undefined;
+  const skipCount = Math.max(0, Number(req.body.skipCount) || 0);
 
   if (!messageText) {
     return res.status(400).json({ error: 'Message is required' });
@@ -335,23 +336,25 @@ app.post('/api/campaign/start', async (req, res) => {
   try {
     const db = getDb();
     const totalUsers = users.length;
+    // Skip first N users but keep them in totalUsers count
+    const usersToSend = skipCount > 0 ? users.slice(skipCount) : users;
     const campaignRef = await db.collection('campaigns').add({
       message: messageText,
       status: 'Sending',
       totalUsers,
       estimatedTime: totalTimeSeconds,
-      remainingUsers: JSON.stringify(users),
+      remainingUsers: JSON.stringify(usersToSend),
       baseDelay,
       createdAt: FieldValue.serverTimestamp(),
-      sentCount: 0,
+      sentCount: skipCount,   // start counter from skipCount
       failedCount: 0
     });
 
     currentCampaign = {
       dbId: campaignRef.id,
       message: messageText,
-      users,
-      sent: 0,
+      users: usersToSend,
+      sent: skipCount,        // internal counter starts from skipCount
       failed: 0,
       baseDelay
     };

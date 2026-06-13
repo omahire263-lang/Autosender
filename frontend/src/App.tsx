@@ -52,6 +52,7 @@ function App() {
   const [durationType, setDurationType] = useState<'hours' | 'minutes'>('hours');
   const [manualDelay, setManualDelay] = useState<string | number>(60);
   const [useManualDelay, setUseManualDelay] = useState(false);
+  const [skipCount, setSkipCount] = useState<string | number>(0);
   const [campaignStatus, setCampaignStatus] = useState<CampaignStatus | null>(null);
   const [isRunning, setIsRunning] = useState(false);
 
@@ -209,17 +210,18 @@ function App() {
     if (!members.length) return alert('Extract members first');
 
     try {
+      const skip = Math.max(0, Number(skipCount) || 0);
       const users = members.map(member => member.id).filter(Boolean);
 
       if (useManualDelay) {
         const delaySeconds = Number(manualDelay);
         if (!delaySeconds || delaySeconds <= 0) return alert('Please enter a valid delay in seconds');
-        await axios.post(`${API_URL}/campaign/start`, { message, users, manualDelaySeconds: delaySeconds });
+        await axios.post(`${API_URL}/campaign/start`, { message, users, manualDelaySeconds: delaySeconds, skipCount: skip });
       } else {
         const val = Number(durationValue) || 0;
         const totalTimeHours = durationType === 'minutes' ? val / 60 : val;
         if (totalTimeHours <= 0) return alert('Please enter a valid duration greater than 0');
-        await axios.post(`${API_URL}/campaign/start`, { message, users, totalTimeHours });
+        await axios.post(`${API_URL}/campaign/start`, { message, users, totalTimeHours, skipCount: skip });
       }
 
       setIsRunning(true);
@@ -382,7 +384,21 @@ function App() {
               Extract Members
             </button>
             {members.length > 0 && (
-              <p className="mt-4 text-green-600 font-semibold text-center">Ready: {members.length} Users</p>
+              <div className="mt-3">
+                <p className="text-green-600 font-semibold text-center mb-2">Ready: {members.length} Users</p>
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-gray-500 font-medium whitespace-nowrap">Skip first</label>
+                  <input
+                    type="number" min={0} max={members.length - 1} value={skipCount}
+                    onChange={e => setSkipCount(e.target.value)}
+                    className="w-20 bg-gray-50 border border-gray-200 text-gray-900 p-1.5 rounded text-sm outline-none focus:ring-2 focus:ring-blue-400"
+                  />
+                  <label className="text-xs text-gray-500 font-medium whitespace-nowrap">members</label>
+                </div>
+                {Number(skipCount) > 0 && (
+                  <p className="text-xs text-orange-500 mt-1">⚠️ First {skipCount} members will be skipped. Sending to {members.length - Number(skipCount)} members (counter starts at {skipCount}/{members.length})</p>
+                )}
+              </div>
             )}
           </div>
 
@@ -461,6 +477,9 @@ function App() {
                 <div>
                   <p className="text-gray-600 font-medium">Status: <span className={campaignStatus.status === 'Sending' ? 'text-green-600' : 'text-yellow-600'}>{campaignStatus.status}</span></p>
                   <p className="text-gray-600 font-medium">Sent: {campaignStatus.sentCount || 0} / {campaignStatus.totalUsers || 0}</p>
+                  {(campaignStatus.sentCount || 0) < (campaignStatus.totalUsers || 0) && campaignStatus.status === 'Sending' && (
+                    <p className="text-xs text-gray-400">Remaining: {(campaignStatus.totalUsers || 0) - (campaignStatus.sentCount || 0)} users</p>
+                  )}
                 </div>
               ) : <p className="text-gray-500">Not started</p>}
             </div>
