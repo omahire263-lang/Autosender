@@ -138,7 +138,7 @@ app.post('/api/auth/login', async (req, res) => {
         phoneNumber: async () => phone,
         phoneCode: async () => code,
         password: async () => '',
-        onError: (err) => console.log(err)
+        onError: (err) => { throw err; }
       }
     );
 
