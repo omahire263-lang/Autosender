@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 import crypto from 'node:crypto';
 import { TelegramClient } from 'telegram';
 import { StringSession } from 'telegram/sessions';
-import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import { initDb, getDb } from './models';
 
 dotenv.config();
@@ -157,7 +157,7 @@ app.post('/api/auth/login', async (req, res) => {
       phoneNumber: phone,
       sessionString,
       sessionToken,
-      createdAt: admin.firestore.FieldValue.serverTimestamp()
+      createdAt: FieldValue.serverTimestamp()
     }, { merge: true });
 
     activeSessionToken = sessionToken;
@@ -275,7 +275,7 @@ app.post('/api/telegram/members', async (req, res) => {
     
     const db = getDb();
     const sentSnapshot = await db.collection('sent_users').get();
-    const sentUserIds = new Set(sentSnapshot.docs.map(doc => doc.id));
+    const sentUserIds = new Set(sentSnapshot.docs.map((doc: any) => doc.id));
 
     const finalMembers = uniqueMembers.filter(m => !sentUserIds.has(m.id));
 
@@ -329,7 +329,7 @@ app.post('/api/campaign/start', async (req, res) => {
       estimatedTime: totalTimeSeconds,
       remainingUsers: JSON.stringify(users),
       baseDelay,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
       sentCount: 0,
       failedCount: 0
     });
@@ -475,7 +475,7 @@ async function runCampaign() {
       campaign.sent++;
       await db.collection('sent_users').doc(userId).set({ 
         userId, 
-        sentAt: admin.firestore.FieldValue.serverTimestamp() 
+        sentAt: FieldValue.serverTimestamp() 
       }, { merge: true });
     } catch (error) {
       console.error('Failed to send to', userId, error);

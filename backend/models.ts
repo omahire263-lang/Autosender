@@ -1,27 +1,27 @@
-import * as admin from 'firebase-admin';
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import { getFirestore, Firestore } from 'firebase-admin/firestore';
 
-let db: admin.firestore.Firestore;
+let db: Firestore;
 
 export async function initDb() {
   const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT;
   
   if (!serviceAccountJson) {
     console.warn("⚠️ FIREBASE_SERVICE_ACCOUNT environment variable is missing!");
-    console.warn("Please add it to your .env file to enable the database.");
     return;
   }
   
   try {
     const serviceAccount = JSON.parse(serviceAccountJson);
-    if (!admin.apps.length) {
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount)
+    if (!getApps().length) {
+      initializeApp({
+        credential: cert(serviceAccount)
       });
     }
-    db = admin.firestore();
+    db = getFirestore();
     console.log("🔥 Firebase Firestore initialized successfully!");
   } catch (error) {
-    console.error("❌ Failed to parse FIREBASE_SERVICE_ACCOUNT JSON. Please check its format.", error);
+    console.error("❌ Failed to initialize Firebase:", error);
   }
 }
 
