@@ -123,7 +123,7 @@ function App() {
   }, [fetchStatus, isRunning]);
 
   useEffect(() => {
-    const handlePopState = (e: PopStateEvent) => {
+    const handlePopState = () => {
       if (step === 'CODE') {
         setStep('PHONE');
       }
