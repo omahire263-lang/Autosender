@@ -165,19 +165,24 @@ function App() {
       setDashboardUser(res.data.user || 'User');
       setStep('DASHBOARD');
     } catch (error) {
-      const msg = getErrorMessage(error, 'Something went wrong');
-      if (msg.includes('PHONE_CODE_INVALID')) {
-        const errorMsg = 'Incorrect OTP! Please check and try again.';
-        setLoginError(errorMsg);
-        alert(errorMsg);
-      } else if (msg.includes('PHONE_CODE_EXPIRED')) {
-        const errorMsg = 'OTP expired. Please go back and request a new one.';
-        setLoginError(errorMsg);
-        alert(errorMsg);
+      let errorMsg = '';
+      if (axios.isAxiosError(error)) {
+        const rawError: string = error.response?.data?.error || error.message || '';
+        if (rawError.toUpperCase().includes('PHONE_CODE_INVALID')) {
+          errorMsg = '❌ Incorrect OTP! Please check and try again.';
+        } else if (rawError.toUpperCase().includes('PHONE_CODE_EXPIRED')) {
+          errorMsg = '⏰ OTP expired! Please go back and request a new one.';
+        } else if (rawError.toUpperCase().includes('FLOOD_WAIT') || rawError.toUpperCase().includes('A WAIT OF')) {
+          const seconds = rawError.match(/\d+/)?.[0] || '';
+          errorMsg = `⏳ Too many attempts! Wait ${seconds ? seconds + ' seconds' : 'some time'} and try again.`;
+        } else {
+          errorMsg = `Login failed: ${rawError || 'Something went wrong'}`;
+        }
       } else {
-        setLoginError(`Login failed: ${msg}`);
-        alert(`Login failed: ${msg}`);
+        errorMsg = 'Login failed. Something went wrong.';
       }
+      setLoginError(errorMsg);
+      alert(errorMsg);
     }
   };
 
