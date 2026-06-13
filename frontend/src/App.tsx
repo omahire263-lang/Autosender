@@ -147,6 +147,7 @@ function App() {
       setStep('CODE');
       setLoginError('');
       window.history.pushState({ step: 'CODE' }, 'Code');
+      alert('OTP sent successfully!');
     } catch (error) {
       alert(`Failed to send code: ${getErrorMessage(error, 'Something went wrong')}`);
     }
@@ -164,11 +165,16 @@ function App() {
     } catch (error) {
       const msg = getErrorMessage(error, 'Something went wrong');
       if (msg.includes('PHONE_CODE_INVALID')) {
-        setLoginError('Incorrect OTP! Please check and try again.');
+        const errorMsg = 'Incorrect OTP! Please check and try again.';
+        setLoginError(errorMsg);
+        alert(errorMsg);
       } else if (msg.includes('PHONE_CODE_EXPIRED')) {
-        setLoginError('OTP expired. Please go back and request a new one.');
+        const errorMsg = 'OTP expired. Please go back and request a new one.';
+        setLoginError(errorMsg);
+        alert(errorMsg);
       } else {
         setLoginError(`Login failed: ${msg}`);
+        alert(`Login failed: ${msg}`);
       }
     }
   };
