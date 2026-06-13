@@ -362,7 +362,22 @@ app.post('/api/campaign/stop', async (req, res) => {
 
   if (currentCampaign) {
     const db = getDb();
-    await db.run('UPDATE campaigns SET status = ? WHERE id = ?', 'Stopped', currentCampaign.dbId);
+    await db.run('UPDATE campaigns SET status = ? WHERE id = ?', 'Paused', currentCampaign.dbId);
+  }
+
+  res.json({ success: true });
+});
+
+app.post('/api/campaign/resume', async (req, res) => {
+  if (!currentCampaign) {
+    return res.status(400).json({ error: 'No paused campaign to resume' });
+  }
+  
+  if (!isCampaignRunning) {
+    isCampaignRunning = true;
+    const db = getDb();
+    await db.run('UPDATE campaigns SET status = ? WHERE id = ?', 'Sending', currentCampaign.dbId);
+    runCampaign();
   }
 
   res.json({ success: true });

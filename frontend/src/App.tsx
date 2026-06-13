@@ -232,6 +232,16 @@ function App() {
     }
   };
 
+  const resumeCampaign = async () => {
+    try {
+      await axios.post(`${API_URL}/campaign/resume`);
+      setIsRunning(true);
+      await fetchStatus();
+    } catch (error) {
+      alert(`Failed to resume: ${getErrorMessage(error, 'Something went wrong')}`);
+    }
+  };
+
   const updateMessage = async () => {
     try {
       await axios.post(`${API_URL}/campaign/update-message`, { message });
@@ -407,12 +417,23 @@ function App() {
 
             <div className="flex gap-4 w-full md:w-auto">
               {!isRunning ? (
-                <button onClick={startCampaign} className="w-full md:w-auto flex items-center justify-center gap-2 bg-blue-600 text-white hover:bg-blue-700 px-8 py-4 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-[0_4px_14px_0_rgba(37,99,235,0.39)]">
-                  <Play fill="currentColor" /> Start Sender
-                </button>
+                campaignStatus && campaignStatus.status === 'Paused' ? (
+                  <>
+                    <button onClick={resumeCampaign} className="w-full md:w-auto flex items-center justify-center gap-2 bg-green-600 text-white hover:bg-green-700 px-6 py-4 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-[0_4px_14px_0_rgba(34,197,94,0.39)]">
+                      <Play fill="currentColor" /> Resume
+                    </button>
+                    <button onClick={startCampaign} className="w-full md:w-auto flex items-center justify-center gap-2 bg-blue-600 text-white hover:bg-blue-700 px-6 py-4 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-[0_4px_14px_0_rgba(37,99,235,0.39)]">
+                      Start New
+                    </button>
+                  </>
+                ) : (
+                  <button onClick={startCampaign} className="w-full md:w-auto flex items-center justify-center gap-2 bg-blue-600 text-white hover:bg-blue-700 px-8 py-4 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-[0_4px_14px_0_rgba(37,99,235,0.39)]">
+                    <Play fill="currentColor" /> Start Sender
+                  </button>
+                )
               ) : (
                 <button onClick={stopCampaign} className="w-full md:w-auto flex items-center justify-center gap-2 bg-red-500 text-white hover:bg-red-600 px-8 py-4 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-[0_4px_14px_0_rgba(239,68,68,0.39)]">
-                  <Square fill="currentColor" /> Stop
+                  <Square fill="currentColor" /> Pause
                 </button>
               )}
             </div>
