@@ -41,6 +41,7 @@ function App() {
   const [step, setStep] = useState<Step>('PHONE');
   const [isLoading, setIsLoading] = useState(true);
   const [dashboardUser, setDashboardUser] = useState('');
+  const [loginError, setLoginError] = useState('');
 
   const [groups, setGroups] = useState<Group[]>([]);
   const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
@@ -118,6 +119,16 @@ function App() {
     return () => clearInterval(interval);
   }, [fetchStatus, isRunning]);
 
+  useEffect(() => {
+    const handlePopState = (e: PopStateEvent) => {
+      if (step === 'CODE') {
+        setStep('PHONE');
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [step]);
+
   const estimatedDelay = useMemo(() => {
     const val = Number(durationValue) || 0;
     const totalHours = durationType === 'minutes' ? val / 60 : val;
@@ -134,12 +145,15 @@ function App() {
       await axios.post(`${API_URL}/auth/send-code`, { phone: formattedPhone });
       setPhone(formattedPhone);
       setStep('CODE');
+      setLoginError('');
+      window.history.pushState({ step: 'CODE' }, 'Code');
     } catch (error) {
       alert(`Failed to send code: ${getErrorMessage(error, 'Something went wrong')}`);
     }
   };
 
   const handleLogin = async () => {
+    setLoginError('');
     try {
       const res = await axios.post<{ success: boolean; user?: string; token?: string }>(`${API_URL}/auth/login`, { phone, code });
       if (res.data.token) {
@@ -148,7 +162,14 @@ function App() {
       setDashboardUser(res.data.user || 'User');
       setStep('DASHBOARD');
     } catch (error) {
-      alert(`Login failed: ${getErrorMessage(error, 'Something went wrong')}`);
+      const msg = getErrorMessage(error, 'Something went wrong');
+      if (msg.includes('PHONE_CODE_INVALID')) {
+        setLoginError('Incorrect OTP! Please check and try again.');
+      } else if (msg.includes('PHONE_CODE_EXPIRED')) {
+        setLoginError('OTP expired. Please go back and request a new one.');
+      } else {
+        setLoginError(`Login failed: ${msg}`);
+      }
     }
   };
 
@@ -262,6 +283,11 @@ function App() {
         <div className="bg-white p-8 rounded-xl shadow-2xl w-96 border border-gray-200">
           <div className="flex justify-center mb-6"><Key size={48} className="text-blue-500" /></div>
           <h2 className="text-2xl font-bold mb-6 text-center">Enter Code</h2>
+          {loginError && (
+            <div className="bg-red-50 text-red-600 p-3 rounded mb-4 text-sm font-medium border border-red-200">
+              {loginError}
+            </div>
+          )}
           <input type="text" placeholder="5-digit code"
             className="w-full bg-gray-100 p-3 rounded mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
             value={code} onChange={e => setCode(e.target.value)} />
