@@ -65,7 +65,9 @@ const parseCookies = (cookieHeader: string | undefined) => {
 };
 
 const getSessionToken = (req: express.Request) => {
-  return parseCookies(req.headers.cookie)[SESSION_COOKIE] || null;
+  const cookieToken = parseCookies(req.headers.cookie)[SESSION_COOKIE];
+  const headerToken = req.headers.authorization?.split(' ')[1];
+  return cookieToken || headerToken || null;
 };
 
 const setSessionCookie = (res: express.Response, token: string) => {
@@ -174,7 +176,8 @@ app.post('/api/auth/login', async (req, res) => {
 
     res.json({
       success: true,
-      user: me.username || me.firstName || 'User'
+      user: me.username || me.firstName || 'User',
+      token: sessionToken
     });
   } catch (error) {
     res.status(400).json({ error: getErrorMessage(error) });
@@ -213,7 +216,8 @@ app.post('/api/auth/init', async (req, res) => {
 
     res.json({
       success: true,
-      user: me.username || me.firstName || 'User'
+      user: me.username || me.firstName || 'User',
+      token: sessionToken
     });
   } catch (error) {
     res.status(401).json({ error: getErrorMessage(error) });
@@ -509,9 +513,27 @@ async function resumeCampaigns() {
   }
 }
 
-initDb().then(() => {
+initDb().then(async () => {
   console.log('SQLite DB initialized');
   app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+  try {
+    const db = getDb();
+    const user = await db.get('SELECT * FROM users WHERE sessionString IS NOT NULL ORDER BY id DESC LIMIT 1');
+    if (user && user.sessionString) {
+      console.log('Auto-connecting client on startup...');
+      const stringSession = new StringSession(user.sessionString);
+      const nextClient = new TelegramClient(stringSession, apiId, apiHash, { connectionRetries: 5 });
+      await nextClient.connect();
+      client = nextClient;
+      activeSessionToken = user.sessionToken;
+      console.log('Auto-connected client successfully.');
+      
+      await resumeCampaigns();
+    }
+  } catch (err) {
+    console.error('Auto-resume failed:', err);
+  }
 
   setInterval(() => {}, 1000 * 60 * 60);
 }).catch(console.error);

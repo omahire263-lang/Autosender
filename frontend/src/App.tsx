@@ -5,6 +5,14 @@ import { Play, Square, Edit3, Users, Settings, Phone, Key, LogOut } from 'lucide
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 axios.defaults.withCredentials = true;
 
+axios.interceptors.request.use(config => {
+  const token = localStorage.getItem('tg_session_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 type Step = 'PHONE' | 'CODE' | 'DASHBOARD';
 type Group = { id: string; title: string };
 type Member = { id: string; username?: string; firstName?: string };
@@ -80,7 +88,10 @@ function App() {
     setIsLoading(true);
 
     try {
-      const res = await axios.post<{ success: boolean; user?: string }>(`${API_URL}/auth/init`);
+      const res = await axios.post<{ success: boolean; user?: string; token?: string }>(`${API_URL}/auth/init`);
+      if (res.data.token) {
+        localStorage.setItem('tg_session_token', res.data.token);
+      }
       setDashboardUser(res.data.user || 'User');
       setStep('DASHBOARD');
       await fetchGroups();
@@ -130,7 +141,10 @@ function App() {
 
   const handleLogin = async () => {
     try {
-      const res = await axios.post<{ success: boolean; user?: string }>(`${API_URL}/auth/login`, { phone, code });
+      const res = await axios.post<{ success: boolean; user?: string; token?: string }>(`${API_URL}/auth/login`, { phone, code });
+      if (res.data.token) {
+        localStorage.setItem('tg_session_token', res.data.token);
+      }
       setDashboardUser(res.data.user || 'User');
       setStep('DASHBOARD');
     } catch (error) {
@@ -206,6 +220,7 @@ function App() {
     } catch (error) {
       console.error(error);
     } finally {
+      localStorage.removeItem('tg_session_token');
       setStep('PHONE');
       setDashboardUser('');
       setGroups([]);
