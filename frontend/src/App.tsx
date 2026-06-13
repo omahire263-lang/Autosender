@@ -386,17 +386,28 @@ function App() {
             {members.length > 0 && (
               <div className="mt-3">
                 <p className="text-green-600 font-semibold text-center mb-2">Ready: {members.length} Users</p>
-                <div className="flex items-center gap-2">
-                  <label className="text-xs text-gray-500 font-medium whitespace-nowrap">Skip first</label>
+                <label className="flex items-center gap-2 cursor-pointer mb-2">
                   <input
-                    type="number" min={0} max={members.length - 1} value={skipCount}
-                    onChange={e => setSkipCount(e.target.value)}
-                    className="w-20 bg-gray-50 border border-gray-200 text-gray-900 p-1.5 rounded text-sm outline-none focus:ring-2 focus:ring-blue-400"
+                    type="checkbox"
+                    checked={Number(skipCount) > 0}
+                    onChange={e => setSkipCount(e.target.checked ? 1 : 0)}
+                    className="w-4 h-4 rounded border-gray-300 text-blue-600"
                   />
-                  <label className="text-xs text-gray-500 font-medium whitespace-nowrap">members</label>
-                </div>
+                  <span className="text-xs text-gray-600 font-medium">Skip starting members</span>
+                </label>
                 {Number(skipCount) > 0 && (
-                  <p className="text-xs text-orange-500 mt-1">⚠️ First {skipCount} members will be skipped. Sending to {members.length - Number(skipCount)} members (counter starts at {skipCount}/{members.length})</p>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-gray-500 font-medium whitespace-nowrap">Skip first</label>
+                      <input
+                        type="number" min={1} max={members.length - 1} value={skipCount}
+                        onChange={e => setSkipCount(e.target.value)}
+                        className="w-20 bg-gray-50 border border-gray-200 text-gray-900 p-1.5 rounded text-sm outline-none focus:ring-2 focus:ring-blue-400"
+                      />
+                      <label className="text-xs text-gray-500 font-medium whitespace-nowrap">members</label>
+                    </div>
+                    <p className="text-xs text-orange-500 mt-1">⚠️ First {skipCount} skipped. Sending to {members.length - Number(skipCount)} members. Counter: {skipCount}/{members.length}</p>
+                  </div>
                 )}
               </div>
             )}
