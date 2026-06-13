@@ -303,6 +303,8 @@ app.post('/api/campaign/start', async (req, res) => {
   const rawUsers: unknown[] = Array.isArray(req.body.users) ? req.body.users : [];
   const users = Array.from(new Set(rawUsers.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)));
   const totalTimeHours = Number(req.body.totalTimeHours);
+  const manualDelaySeconds = Number(req.body.manualDelaySeconds);
+  const isManual = req.body.manualDelaySeconds !== undefined;
 
   if (!messageText) {
     return res.status(400).json({ error: 'Message is required' });
@@ -313,15 +315,26 @@ app.post('/api/campaign/start', async (req, res) => {
   }
 
   if (!Number.isFinite(totalTimeHours) || totalTimeHours <= 0) {
-    return res.status(400).json({ error: 'Valid duration in hours is required' });
+    if (!isManual) return res.status(400).json({ error: 'Valid duration in hours is required' });
   }
 
-  const totalUsers = users.length;
-  const totalTimeSeconds = Math.max(1, Math.round(totalTimeHours * 3600));
-  const baseDelay = totalTimeSeconds / totalUsers;
+  let baseDelay: number;
+  let totalTimeSeconds: number;
+
+  if (isManual) {
+    if (!Number.isFinite(manualDelaySeconds) || manualDelaySeconds <= 0) {
+      return res.status(400).json({ error: 'Valid delay in seconds is required' });
+    }
+    baseDelay = manualDelaySeconds;
+    totalTimeSeconds = baseDelay * users.length;
+  } else {
+    totalTimeSeconds = Math.max(1, Math.round(totalTimeHours * 3600));
+    baseDelay = totalTimeSeconds / users.length;
+  }
 
   try {
     const db = getDb();
+    const totalUsers = users.length;
     const campaignRef = await db.collection('campaigns').add({
       message: messageText,
       status: 'Sending',
@@ -373,6 +386,22 @@ app.post('/api/campaign/resume', async (req, res) => {
     const db = getDb();
     await db.collection('campaigns').doc(currentCampaign.dbId).update({ status: 'Sending' });
     runCampaign();
+  }
+
+  res.json({ success: true });
+});
+
+app.post('/api/campaign/update-delay', async (req, res) => {
+  const delaySeconds = Number(req.body.delaySeconds);
+
+  if (!Number.isFinite(delaySeconds) || delaySeconds <= 0) {
+    return res.status(400).json({ error: 'Valid delay in seconds is required' });
+  }
+
+  if (currentCampaign) {
+    currentCampaign.baseDelay = delaySeconds;
+    const db = getDb();
+    await db.collection('campaigns').doc(currentCampaign.dbId).update({ baseDelay: delaySeconds });
   }
 
   res.json({ success: true });

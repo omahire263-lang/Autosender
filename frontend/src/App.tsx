@@ -50,6 +50,8 @@ function App() {
   const [message, setMessage] = useState('Hello! This is a test message.');
   const [durationValue, setDurationValue] = useState<string | number>(3);
   const [durationType, setDurationType] = useState<'hours' | 'minutes'>('hours');
+  const [manualDelay, setManualDelay] = useState<string | number>(60);
+  const [useManualDelay, setUseManualDelay] = useState(false);
   const [campaignStatus, setCampaignStatus] = useState<CampaignStatus | null>(null);
   const [isRunning, setIsRunning] = useState(false);
 
@@ -203,18 +205,18 @@ function App() {
 
     try {
       const users = members.map(member => member.id).filter(Boolean);
-      const val = Number(durationValue) || 0;
-      const totalTimeHours = durationType === 'minutes' ? val / 60 : val;
-      
-      if (totalTimeHours <= 0) {
-        return alert('Please enter a valid duration greater than 0');
+
+      if (useManualDelay) {
+        const delaySeconds = Number(manualDelay);
+        if (!delaySeconds || delaySeconds <= 0) return alert('Please enter a valid delay in seconds');
+        await axios.post(`${API_URL}/campaign/start`, { message, users, manualDelaySeconds: delaySeconds });
+      } else {
+        const val = Number(durationValue) || 0;
+        const totalTimeHours = durationType === 'minutes' ? val / 60 : val;
+        if (totalTimeHours <= 0) return alert('Please enter a valid duration greater than 0');
+        await axios.post(`${API_URL}/campaign/start`, { message, users, totalTimeHours });
       }
 
-      await axios.post(`${API_URL}/campaign/start`, {
-        message,
-        users,
-        totalTimeHours
-      });
       setIsRunning(true);
       await fetchStatus();
     } catch (error) {
@@ -248,6 +250,17 @@ function App() {
       alert('Message updated live!');
     } catch (error) {
       console.error(error);
+    }
+  };
+
+  const updateDelay = async () => {
+    const delaySeconds = Number(manualDelay);
+    if (!delaySeconds || delaySeconds <= 0) return alert('Enter a valid delay in seconds');
+    try {
+      await axios.post(`${API_URL}/campaign/update-delay`, { delaySeconds });
+      alert(`Delay updated to ${delaySeconds} seconds!`);
+    } catch (error) {
+      alert(`Failed to update delay: ${getErrorMessage(error, 'Something went wrong')}`);
     }
   };
 
@@ -371,25 +384,57 @@ function App() {
           <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
              <h2 className="text-xl font-bold mb-4 flex items-center gap-2"><Settings className="text-purple-600" /> Settings</h2>
              
-             <div className="flex gap-4 mb-4">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="radio" className="text-purple-600 focus:ring-purple-500 bg-white border-gray-300" checked={durationType === 'hours'} onChange={() => setDurationType('hours')} />
-                  <span className="text-sm text-gray-700 font-medium">Hours</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="radio" className="text-purple-600 focus:ring-purple-500 bg-white border-gray-300" checked={durationType === 'minutes'} onChange={() => setDurationType('minutes')} />
-                  <span className="text-sm text-gray-700 font-medium">Minutes</span>
-                </label>
+             {/* Mode Toggle */}
+             <div className="flex gap-2 mb-4 bg-gray-100 p-1 rounded-lg">
+               <button
+                 onClick={() => setUseManualDelay(false)}
+                 className={`flex-1 py-2 px-3 rounded-md text-sm font-semibold transition-colors ${!useManualDelay ? 'bg-white shadow text-purple-700' : 'text-gray-500'}`}
+               >
+                 ⏱ Auto (Hours/Min)
+               </button>
+               <button
+                 onClick={() => setUseManualDelay(true)}
+                 className={`flex-1 py-2 px-3 rounded-md text-sm font-semibold transition-colors ${useManualDelay ? 'bg-white shadow text-orange-600' : 'text-gray-500'}`}
+               >
+                 ⚡ Manual (Seconds)
+               </button>
              </div>
-             
-             <label className="block text-gray-600 font-medium text-sm mb-2">Duration ({durationType === 'hours' ? 'Hours' : 'Minutes'})</label>
-             <input type="number" min={0.1} step={0.1} value={durationValue} onChange={e => setDurationValue(e.target.value)}
-               className="w-full bg-gray-50 border border-gray-200 text-gray-900 p-3 rounded mb-4 outline-none focus:ring-2 focus:ring-purple-500" />
 
-             <label className="block text-gray-600 font-medium text-sm mb-2">Estimated Delay</label>
-             <div className="bg-blue-50 border border-blue-100 p-3 rounded text-blue-700 font-mono font-medium">
-               {members.length ? estimatedDelay : 0} seconds / msg
-             </div>
+             {useManualDelay ? (
+               /* Manual Delay Mode */
+               <div>
+                 <label className="block text-gray-600 font-medium text-sm mb-2">Delay Between Messages (seconds)</label>
+                 <input type="number" min={1} step={1} value={manualDelay} onChange={e => setManualDelay(e.target.value)}
+                   className="w-full bg-gray-50 border border-gray-200 text-gray-900 p-3 rounded mb-3 outline-none focus:ring-2 focus:ring-orange-400" />
+                 {isRunning && (
+                   <button onClick={updateDelay} className="w-full bg-orange-100 text-orange-700 hover:bg-orange-200 p-2 rounded font-semibold text-sm transition-colors">
+                     🔄 Update Delay Live
+                   </button>
+                 )}
+                 <p className="text-xs text-gray-400 mt-2">Campaign chalte waqt bhi delay change kar sakte ho</p>
+               </div>
+             ) : (
+               /* Auto Duration Mode */
+               <div>
+                 <div className="flex gap-4 mb-4">
+                   <label className="flex items-center gap-2 cursor-pointer">
+                     <input type="radio" className="text-purple-600 focus:ring-purple-500 bg-white border-gray-300" checked={durationType === 'hours'} onChange={() => setDurationType('hours')} />
+                     <span className="text-sm text-gray-700 font-medium">Hours</span>
+                   </label>
+                   <label className="flex items-center gap-2 cursor-pointer">
+                     <input type="radio" className="text-purple-600 focus:ring-purple-500 bg-white border-gray-300" checked={durationType === 'minutes'} onChange={() => setDurationType('minutes')} />
+                     <span className="text-sm text-gray-700 font-medium">Minutes</span>
+                   </label>
+                 </div>
+                 <label className="block text-gray-600 font-medium text-sm mb-2">Duration ({durationType === 'hours' ? 'Hours' : 'Minutes'})</label>
+                 <input type="number" min={0.1} step={0.1} value={durationValue} onChange={e => setDurationValue(e.target.value)}
+                   className="w-full bg-gray-50 border border-gray-200 text-gray-900 p-3 rounded mb-4 outline-none focus:ring-2 focus:ring-purple-500" />
+                 <label className="block text-gray-600 font-medium text-sm mb-2">Estimated Delay</label>
+                 <div className="bg-blue-50 border border-blue-100 p-3 rounded text-blue-700 font-mono font-medium">
+                   {members.length ? estimatedDelay : 0} seconds / msg
+                 </div>
+               </div>
+             )}
           </div>
 
           <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm md:col-span-2">
