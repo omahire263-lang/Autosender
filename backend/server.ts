@@ -561,7 +561,7 @@ async function resumeCampaigns() {
 
 initDb().then(async () => {
   console.log('Firebase DB initialized');
-  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  app.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
 
   try {
     const db = getDb();
