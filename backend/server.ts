@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import crypto from 'node:crypto';
 import { TelegramClient } from 'telegram';
 import { StringSession } from 'telegram/sessions';
+import * as admin from 'firebase-admin';
 import { initDb, getDb } from './models';
 
 dotenv.config();
@@ -151,23 +152,13 @@ app.post('/api/auth/login', async (req, res) => {
 
     const sessionToken = crypto.randomUUID();
     const db = getDb();
-    const user = await db.get('SELECT * FROM users WHERE phoneNumber = ?', phone);
-
-    if (!user) {
-      await db.run(
-        'INSERT INTO users (phoneNumber, sessionString, sessionToken) VALUES (?, ?, ?)',
-        phone,
-        sessionString,
-        sessionToken
-      );
-    } else {
-      await db.run(
-        'UPDATE users SET sessionString = ?, sessionToken = ? WHERE phoneNumber = ?',
-        sessionString,
-        sessionToken,
-        phone
-      );
-    }
+    
+    await db.collection('users').doc(phone).set({
+      phoneNumber: phone,
+      sessionString,
+      sessionToken,
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
 
     activeSessionToken = sessionToken;
     setSessionCookie(res, sessionToken);
@@ -193,9 +184,15 @@ app.post('/api/auth/init', async (req, res) => {
 
   try {
     const db = getDb();
-    const user = await db.get('SELECT * FROM users WHERE sessionToken = ?', sessionToken);
+    const userSnap = await db.collection('users').where('sessionToken', '==', sessionToken).limit(1).get();
 
-    if (!user || !user.sessionString) {
+    if (userSnap.empty) {
+      return res.status(401).json({ error: 'Invalid session' });
+    }
+    
+    const user = userSnap.docs[0].data();
+
+    if (!user.sessionString) {
       return res.status(401).json({ error: 'Invalid session' });
     }
 
@@ -277,8 +274,8 @@ app.post('/api/telegram/members', async (req, res) => {
     const uniqueMembers = Array.from(new Map(allMembers.map(item => [item.id, item])).values());
     
     const db = getDb();
-    const sentUsersRecords = await db.all('SELECT userId FROM sent_users');
-    const sentUserIds = new Set(sentUsersRecords.map(r => r.userId));
+    const sentSnapshot = await db.collection('sent_users').get();
+    const sentUserIds = new Set(sentSnapshot.docs.map(doc => doc.id));
 
     const finalMembers = uniqueMembers.filter(m => !sentUserIds.has(m.id));
 
@@ -289,7 +286,7 @@ app.post('/api/telegram/members', async (req, res) => {
 });
 
 let currentCampaign: {
-  dbId: number;
+  dbId: string;
   message: string;
   users: string[];
   sent: number;
@@ -325,22 +322,20 @@ app.post('/api/campaign/start', async (req, res) => {
 
   try {
     const db = getDb();
-    const result = await db.run(
-      'INSERT INTO campaigns (message, status, totalUsers, estimatedTime, remainingUsers, baseDelay) VALUES (?, ?, ?, ?, ?, ?)',
-      messageText,
-      'Sending',
+    const campaignRef = await db.collection('campaigns').add({
+      message: messageText,
+      status: 'Sending',
       totalUsers,
-      totalTimeSeconds,
-      JSON.stringify(users),
-      baseDelay
-    );
-
-    if (result.lastID === undefined) {
-      return res.status(500).json({ error: 'Failed to create campaign' });
-    }
+      estimatedTime: totalTimeSeconds,
+      remainingUsers: JSON.stringify(users),
+      baseDelay,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      sentCount: 0,
+      failedCount: 0
+    });
 
     currentCampaign = {
-      dbId: result.lastID,
+      dbId: campaignRef.id,
       message: messageText,
       users,
       sent: 0,
@@ -349,7 +344,7 @@ app.post('/api/campaign/start', async (req, res) => {
     };
     isCampaignRunning = true;
 
-    res.json({ success: true, campaignId: result.lastID });
+    res.json({ success: true, campaignId: campaignRef.id });
 
     runCampaign();
   } catch (error) {
@@ -362,7 +357,7 @@ app.post('/api/campaign/stop', async (req, res) => {
 
   if (currentCampaign) {
     const db = getDb();
-    await db.run('UPDATE campaigns SET status = ? WHERE id = ?', 'Paused', currentCampaign.dbId);
+    await db.collection('campaigns').doc(currentCampaign.dbId).update({ status: 'Paused' });
   }
 
   res.json({ success: true });
@@ -376,7 +371,7 @@ app.post('/api/campaign/resume', async (req, res) => {
   if (!isCampaignRunning) {
     isCampaignRunning = true;
     const db = getDb();
-    await db.run('UPDATE campaigns SET status = ? WHERE id = ?', 'Sending', currentCampaign.dbId);
+    await db.collection('campaigns').doc(currentCampaign.dbId).update({ status: 'Sending' });
     runCampaign();
   }
 
@@ -393,7 +388,7 @@ app.post('/api/campaign/update-message', async (req, res) => {
   if (currentCampaign) {
     currentCampaign.message = messageText;
     const db = getDb();
-    await db.run('UPDATE campaigns SET message = ? WHERE id = ?', messageText, currentCampaign.dbId);
+    await db.collection('campaigns').doc(currentCampaign.dbId).update({ message: messageText });
   }
 
   res.json({ success: true });
@@ -403,8 +398,8 @@ app.get('/api/campaign/status', async (req, res) => {
   if (!currentCampaign) return res.json({ status: null });
 
   const db = getDb();
-  const c = await db.get('SELECT * FROM campaigns WHERE id = ?', currentCampaign.dbId);
-  res.json({ status: c });
+  const doc = await db.collection('campaigns').doc(currentCampaign.dbId).get();
+  res.json({ status: doc.exists ? doc.data() : null });
 });
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
@@ -478,20 +473,21 @@ async function runCampaign() {
       const uniqueMessage = antiBanSpin(campaign.message);
       await activeClient.sendMessage(userId, { message: uniqueMessage });
       campaign.sent++;
-      await db.run('INSERT OR IGNORE INTO sent_users (userId) VALUES (?)', userId);
+      await db.collection('sent_users').doc(userId).set({ 
+        userId, 
+        sentAt: admin.firestore.FieldValue.serverTimestamp() 
+      }, { merge: true });
     } catch (error) {
       console.error('Failed to send to', userId, error);
       campaign.failed++;
     }
 
-    await db.run(
-      'UPDATE campaigns SET sentCount = ?, failedCount = ?, status = ?, remainingUsers = ? WHERE id = ?',
-      campaign.sent,
-      campaign.failed,
-      campaign.users.length === 0 ? 'Completed' : 'Sending',
-      JSON.stringify(campaign.users),
-      campaign.dbId
-    );
+    await db.collection('campaigns').doc(campaign.dbId).update({
+      sentCount: campaign.sent,
+      failedCount: campaign.failed,
+      status: campaign.users.length === 0 ? 'Completed' : 'Sending',
+      remainingUsers: JSON.stringify(campaign.users)
+    });
 
     if (campaign.users.length === 0) {
       isCampaignRunning = false;
@@ -505,46 +501,52 @@ async function runCampaign() {
 
 async function resumeCampaigns() {
   const db = getDb();
-  const activeDbCampaign = await db.get('SELECT * FROM campaigns WHERE status = ? ORDER BY id DESC', 'Sending');
-  if (activeDbCampaign && activeDbCampaign.remainingUsers) {
-      try {
-        const remaining = JSON.parse(activeDbCampaign.remainingUsers);
-        if (remaining.length > 0) {
-            currentCampaign = {
-                dbId: activeDbCampaign.id,
-                message: activeDbCampaign.message,
-                users: remaining,
-                sent: activeDbCampaign.sentCount || 0,
-                failed: activeDbCampaign.failedCount || 0,
-                baseDelay: activeDbCampaign.baseDelay || ((activeDbCampaign.estimatedTime || 3600) / (activeDbCampaign.totalUsers || 1))
-            };
-            isCampaignRunning = true;
-            console.log('Resuming campaign from DB', currentCampaign.dbId);
-            runCampaign();
-        }
-      } catch (e) {
-        console.error('Failed to resume campaign', e);
+  const cSnap = await db.collection('campaigns').where('status', '==', 'Sending').limit(1).get();
+  if (!cSnap.empty) {
+      const activeDbCampaign = { id: cSnap.docs[0].id, ...(cSnap.docs[0].data()) } as any;
+      if (activeDbCampaign.remainingUsers) {
+          try {
+            const remaining = JSON.parse(activeDbCampaign.remainingUsers);
+            if (remaining.length > 0) {
+                currentCampaign = {
+                    dbId: activeDbCampaign.id,
+                    message: activeDbCampaign.message,
+                    users: remaining,
+                    sent: activeDbCampaign.sentCount || 0,
+                    failed: activeDbCampaign.failedCount || 0,
+                    baseDelay: activeDbCampaign.baseDelay || ((activeDbCampaign.estimatedTime || 3600) / (activeDbCampaign.totalUsers || 1))
+                };
+                isCampaignRunning = true;
+                console.log('Resuming campaign from DB', currentCampaign.dbId);
+                runCampaign();
+            }
+          } catch (e) {
+            console.error('Failed to resume campaign', e);
+          }
       }
   }
 }
 
 initDb().then(async () => {
-  console.log('SQLite DB initialized');
+  console.log('Firebase DB initialized');
   app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
   try {
     const db = getDb();
-    const user = await db.get('SELECT * FROM users WHERE sessionString IS NOT NULL ORDER BY id DESC LIMIT 1');
-    if (user && user.sessionString) {
-      console.log('Auto-connecting client on startup...');
-      const stringSession = new StringSession(user.sessionString);
-      const nextClient = new TelegramClient(stringSession, apiId, apiHash, { connectionRetries: 5 });
-      await nextClient.connect();
-      client = nextClient;
-      activeSessionToken = user.sessionToken;
-      console.log('Auto-connected client successfully.');
-      
-      await resumeCampaigns();
+    const userSnap = await db.collection('users').orderBy('createdAt', 'desc').limit(1).get();
+    if (!userSnap.empty) {
+      const user = userSnap.docs[0].data();
+      if (user.sessionString) {
+        console.log('Auto-connecting client on startup...');
+        const stringSession = new StringSession(user.sessionString);
+        const nextClient = new TelegramClient(stringSession, apiId, apiHash, { connectionRetries: 5 });
+        await nextClient.connect();
+        client = nextClient;
+        activeSessionToken = user.sessionToken;
+        console.log('Auto-connected client successfully.');
+        
+        await resumeCampaigns();
+      }
     }
   } catch (err) {
     console.error('Auto-resume failed:', err);
