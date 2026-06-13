@@ -18,7 +18,7 @@
     "express": "^5.2.1",
     "input": "^1.0.1",
     "sqlite": "^5.1.1",
-    "sqlite3": "^6.0.1",
+    "sqlite3": "^5.1.7",
     "telegram": "^2.26.22"
   },
   "devDependencies": {
