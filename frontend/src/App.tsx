@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
-import { Play, Square, Edit3, Users, Settings, Phone, Key, LogOut, MessageCircle } from 'lucide-react';
+import { Play, Square, Edit3, Users, Settings, Phone, Key, LogOut, MessageCircle, X, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 axios.defaults.withCredentials = true;
@@ -61,6 +61,14 @@ function App() {
   const [activeCampaigns, setActiveCampaigns] = useState<CampaignStatus[]>([]);
   const [history, setHistory] = useState<CampaignStatus[]>([]);
   const [isRunning, setIsRunning] = useState(false);
+  const [historyPage, setHistoryPage] = useState(1);
+  const itemsPerPage = 15;
+
+  const paginatedHistory = useMemo(() => {
+    const start = (historyPage - 1) * itemsPerPage;
+    return history.slice(start, start + itemsPerPage);
+  }, [history, historyPage]);
+  const totalPages = Math.ceil(history.length / itemsPerPage) || 1;
 
   const [isGroupsLoading, setIsGroupsLoading] = useState(false);
   const [memberStats, setMemberStats] = useState<MemberStats | null>(null);
@@ -325,6 +333,17 @@ function App() {
   const stopCampaign = async () => {
     try {
       await axios.post(`${API_URL}/campaign/pause-all`);
+      setIsRunning(false);
+      await fetchStatus();
+      await fetchHistory();
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const closeAllCampaigns = async () => {
+    try {
+      await axios.post(`${API_URL}/campaign/stop-all`);
       setIsRunning(false);
       await fetchStatus();
       await fetchHistory();
@@ -734,9 +753,14 @@ return (
                   <Play fill="currentColor" /> {activeCampaigns.length > 0 ? 'Start Another' : 'Start Sender'}
                 </button>
                 {activeCampaigns.length > 0 && (
-                  <button onClick={stopCampaign} className="w-full flex items-center justify-center gap-2 bg-red-500 text-white hover:bg-red-600 px-8 py-3 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-[0_4px_14px_0_rgba(239,68,68,0.39)]">
-                    <Square fill="currentColor" /> Pause All
-                  </button>
+                  <div className="flex gap-2">
+                    <button onClick={stopCampaign} className="w-full flex items-center justify-center gap-2 bg-red-500 text-white hover:bg-red-600 px-6 py-3 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-[0_4px_14px_0_rgba(239,68,68,0.39)]">
+                      <Square fill="currentColor" /> Pause
+                    </button>
+                    <button onClick={closeAllCampaigns} className="w-full flex items-center justify-center gap-2 bg-gray-800 text-white hover:bg-gray-900 px-6 py-3 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-[0_4px_14px_0_rgba(31,41,55,0.39)]">
+                      <X fill="currentColor" /> Close
+                    </button>
+                  </div>
                 )}
                 {!isRunning && history.some(h => h.status === 'Paused') && (
                   <button onClick={resumeCampaign} className="w-full flex items-center justify-center gap-2 bg-green-600 text-white hover:bg-green-700 px-8 py-3 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-[0_4px_14px_0_rgba(34,197,94,0.39)]">
@@ -759,12 +783,12 @@ return (
                      </tr>
                    </thead>
                    <tbody>
-                     {history.length > 0 ? history.map((h, i) => (
+                     {paginatedHistory.length > 0 ? paginatedHistory.map((h, i) => (
                        <tr key={h.id || i} className="border-b hover:bg-gray-50 transition-colors">
                          <td className="p-3 text-sm text-gray-600 whitespace-nowrap">{h.createdAt ? new Date(h.createdAt).toLocaleString() : 'N/A'}</td>
                          <td className="p-3 text-sm font-medium text-gray-800 max-w-xs truncate" title={h.message}>{h.message}</td>
                          <td className="p-3 text-sm">
-                           <span className={`px-2 py-1 rounded text-xs font-bold ${h.status === 'Completed' ? 'bg-green-100 text-green-700' : h.status === 'Paused' ? 'bg-yellow-100 text-yellow-700' : 'bg-blue-100 text-blue-700'}`}>
+                           <span className={`px-2 py-1 rounded text-xs font-bold ${h.status === 'Completed' ? 'bg-green-100 text-green-700' : h.status === 'Stopped' ? 'bg-red-100 text-red-700' : h.status === 'Paused' ? 'bg-yellow-100 text-yellow-700' : 'bg-blue-100 text-blue-700'}`}>
                              {h.status}
                            </span>
                          </td>
@@ -776,7 +800,28 @@ return (
                    </tbody>
                  </table>
                </div>
-           </div>
+               {totalPages > 1 && (
+                 <div className="flex items-center justify-center gap-4 mt-6">
+                   <button
+                     onClick={() => setHistoryPage(p => Math.max(1, p - 1))}
+                     disabled={historyPage === 1}
+                     className="p-2 rounded bg-gray-100 hover:bg-gray-200 text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                   >
+                     <ChevronLeft size={20} />
+                   </button>
+                   <span className="text-gray-700 font-medium text-sm">
+                     Page {historyPage} of {totalPages}
+                   </span>
+                   <button
+                     onClick={() => setHistoryPage(p => Math.min(totalPages, p + 1))}
+                     disabled={historyPage === totalPages}
+                     className="p-2 rounded bg-gray-100 hover:bg-gray-200 text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                   >
+                     <ChevronRight size={20} />
+                   </button>
+                 </div>
+               )}
+            </div>
          </div>
        </div>
      </div>

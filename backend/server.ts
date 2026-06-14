@@ -496,20 +496,35 @@ app.post('/api/campaign/pause-all', async (req, res) => {
   res.json({ success: true });
 });
 
-app.post('/api/campaign/stop', async (req, res) => {
+app.post('/api/campaign/stop-all', async (req, res) => {
   const db = getDb();
   for (const [id, campaign] of activeCampaigns.entries()) {
     campaign.isRunning = false;
-    await db.collection('campaigns').doc(id).update({ status: 'Paused' }).catch(() => {});
+    await db.collection('campaigns').doc(id).update({ status: 'Stopped' }).catch(() => {});
   }
   activeCampaigns.clear();
+
+  const snap = await db.collection('campaigns').where('status', '==', 'Sending').get();
+  for (const doc of snap.docs) {
+    await db.collection('campaigns').doc(doc.id).update({ status: 'Stopped' }).catch(() => {});
+  }
+
   res.json({ success: true });
 });
 
 app.get('/api/campaign/history', async (req, res) => {
   try {
     const db = getDb();
-    const snap = await db.collection('campaigns').orderBy('createdAt', 'desc').limit(20).get();
+    
+    // Auto-delete 30 days old campaigns
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const oldSnap = await db.collection('campaigns').where('createdAt', '<', thirtyDaysAgo).get();
+    for (const doc of oldSnap.docs) {
+      await db.collection('campaigns').doc(doc.id).delete().catch(() => {});
+    }
+
+    const snap = await db.collection('campaigns').orderBy('createdAt', 'desc').limit(100).get();
     const history = snap.docs.map(doc => {
       const data = doc.data();
       return { id: doc.id, ...data, createdAt: data.createdAt?.toDate?.()?.toISOString() || null };
