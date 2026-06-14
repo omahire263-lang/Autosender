@@ -655,7 +655,9 @@ async function runCampaign() {
     try {
       const uniqueMessage = antiBanSpin(campaign.message);
       console.log(`Sending to ${userId}...`);
-      await activeClient.sendMessage(userId, { message: uniqueMessage });
+      let peer: any = userId;
+      if (/^-?\d+$/.test(userId)) peer = BigInt(userId);
+      await activeClient.sendMessage(peer, { message: uniqueMessage });
       campaign.sent++;
       console.log(`Sent successfully. Total sent: ${campaign.sent}`);
       await db.collection('sent_users').doc(userId).set({ 
