@@ -14,7 +14,8 @@ const allowedOrigins = [
   'http://localhost:5173',
   process.env.FRONTEND_URL,
   'https://autosender-p3gue3tpb-omahire21s-projects.vercel.app',
-  'https://autosender-web.vercel.app'
+  'https://autosender-web.vercel.app',
+  'https://frontend-five-phi-26.vercel.app'
 ].filter(Boolean);
 
 app.use(cors({ 
@@ -620,8 +621,9 @@ async function runCampaign() {
       break;
     }
 
-    const delay = campaign.baseDelay * 1000 + (Math.random() * 10000 - 5000);
-    await sleep(Math.max(1000, delay));
+    const randomVariation = campaign.baseDelay > 5 ? (Math.random() * 2000 - 1000) : 0;
+    const delay = Math.max(campaign.baseDelay * 1000 + randomVariation, 500);
+    await sleep(delay);
   }
 }
 

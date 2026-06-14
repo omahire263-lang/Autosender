@@ -4,8 +4,8 @@
 
 @layer base {
   body {
-    background-color: #111827;
-    color: #f9fafb;
+    background-color: #f3f4f6;
+    color: #111827;
     font-family: 'Inter', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
   }

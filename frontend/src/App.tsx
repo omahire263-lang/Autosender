@@ -385,7 +385,7 @@ if (platform === 'NONE') {
   if (platform === 'WHATSAPP') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white text-gray-900 p-4">
-        <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md border border-green-300 text-center">
+        <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-green-300 text-center">
           <div className="flex justify-center mb-6"><MessageCircle size={56} className="text-green-600" /></div>
           <h2 className="text-2xl font-bold mb-3">WhatsApp Automation</h2>
           <p className="text-gray-600 mb-8 text-sm px-2">
@@ -408,7 +408,7 @@ if (platform === 'NONE') {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-900 text-gray-100">
+      <div className="min-h-screen flex items-center justify-center bg-gray-100 text-gray-900">
         Loading...
       </div>
     );
@@ -417,7 +417,7 @@ if (platform === 'NONE') {
 if (step === 'PHONE') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white text-gray-900">
-        <div className="bg-white p-8 rounded-xl shadow-2xl w-96 border border-gray-300">
+        <div className="bg-white p-8 rounded-xl shadow-xl w-96 border border-gray-300">
           <div className="flex justify-center mb-6"><Phone size={48} className="text-blue-500" /></div>
           <h2 className="text-2xl font-bold mb-6 text-center">Telegram Login</h2>
 
@@ -454,7 +454,7 @@ if (step === 'PHONE') {
 if (step === 'SAVE_SESSION') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white text-gray-900">
-        <div className="bg-white p-8 rounded-xl shadow-2xl w-96 border border-gray-300">
+        <div className="bg-white p-8 rounded-xl shadow-xl w-96 border border-gray-300">
           <div className="flex justify-center mb-6"><Key size={48} className="text-purple-500" /></div>
           <h2 className="text-2xl font-bold mb-6 text-center">Save Session</h2>
           {loginError && (
@@ -484,7 +484,7 @@ if (step === 'SAVE_SESSION') {
   if (step === 'CODE') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white text-gray-900">
-        <div className="bg-white p-8 rounded-xl shadow-2xl w-96 border border-gray-300">
+        <div className="bg-white p-8 rounded-xl shadow-xl w-96 border border-gray-300">
           <div className="flex justify-center mb-6"><Key size={48} className="text-blue-500" /></div>
           <h2 className="text-2xl font-bold mb-6 text-center">Enter Code</h2>
           {loginError && (
@@ -504,23 +504,23 @@ if (step === 'SAVE_SESSION') {
   }
 
 return (
-    <div className="min-h-screen bg-gray-900 text-gray-100 p-4 md:p-8">
+    <div className="min-h-screen bg-gray-100 text-gray-900 p-4 md:p-8">
       <div className="max-w-4xl mx-auto space-y-6">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
           <h1 className="text-3xl sm:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 flex items-center gap-3">
             <Users className="text-blue-400" size={32} /> Auto-Sender
           </h1>
-          <button onClick={handleLogout} className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-gray-200 px-4 py-2 rounded-lg font-semibold transition-colors">
+          <button onClick={handleLogout} className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-semibold transition-colors">
             <LogOut size={18} /> Logout
           </button>
         </div>
 
         {dashboardUser && (
-          <div className="flex flex-col sm:flex-row items-center justify-between bg-gray-800 p-4 rounded-lg border border-gray-700">
-            <p className="text-gray-400 text-center sm:text-left mb-4 sm:mb-0">Logged in as: <span className="text-gray-100 font-semibold">{dashboardUser}</span></p>
+          <div className="flex flex-col sm:flex-row items-center justify-between bg-white p-4 rounded-lg border border-gray-200">
+            <p className="text-gray-500 text-center sm:text-left mb-4 sm:mb-0">Logged in as: <span className="text-gray-900 font-semibold">{dashboardUser}</span></p>
             {loggedInSessionString && (
               <div className="flex items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0">
-                <input type="password" readOnly value={loggedInSessionString} className="bg-gray-900 border border-gray-600 rounded p-2 text-sm text-gray-400 w-full sm:w-48 font-mono outline-none" placeholder="Session String" />
+                <input type="password" readOnly value={loggedInSessionString} className="bg-gray-100 border border-gray-300 rounded p-2 text-sm text-gray-500 w-full sm:w-48 font-mono outline-none" placeholder="Session String" />
                 <button onClick={() => { navigator.clipboard.writeText(loggedInSessionString); alert('Copied to clipboard!'); }} className="bg-purple-600 text-white px-3 py-2 rounded text-sm font-semibold hover:bg-purple-700 transition-colors whitespace-nowrap flex items-center gap-1">
                   <Key size={14}/> Copy Session
                 </button>
@@ -530,35 +530,35 @@ return (
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700 shadow-sm flex flex-col max-h-[400px]">
+          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col max-h-[400px]">
             <div className="flex items-center justify-between mb-4 shrink-0">
-              <h2 className="text-xl font-bold flex items-center gap-2 text-gray-100"><Users className="text-blue-400" /> Target Audience</h2>
-              <button onClick={fetchGroups} className="text-sm bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-gray-300 font-medium">
+              <h2 className="text-xl font-bold flex items-center gap-2 text-gray-900"><Users className="text-blue-400" /> Target Audience</h2>
+              <button onClick={fetchGroups} className="text-sm bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded text-gray-600 font-medium">
                 {isGroupsLoading ? 'Loading...' : 'Refresh'}
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto bg-gray-700 rounded p-3 mb-4 space-y-2 border border-gray-600">
+            <div className="flex-1 overflow-y-auto bg-gray-100 rounded p-3 mb-4 space-y-2 border border-gray-300">
               {isGroupsLoading ? (
-                <p className="text-gray-400 text-sm text-center py-4">Fetching groups from Telegram...</p>
+                <p className="text-gray-500 text-sm text-center py-4">Fetching groups from Telegram...</p>
               ) : groups.length === 0 ? (
-                <p className="text-gray-400 text-sm text-center py-4">No groups found.</p>
+                <p className="text-gray-500 text-sm text-center py-4">No groups found.</p>
               ) : (
                 groups.map(g => (
-                  <label key={g.id} className="flex items-center gap-3 p-2 hover:bg-gray-600 rounded cursor-pointer transition-colors">
+                  <label key={g.id} className="flex items-center gap-3 p-2 hover:bg-gray-200 rounded cursor-pointer transition-colors">
                     <input
                       type="checkbox"
-                      className="w-5 h-5 rounded border-gray-500 text-blue-400 focus:ring-blue-500 bg-gray-700"
+                      className="w-5 h-5 rounded border-gray-500 text-blue-400 focus:ring-blue-500 bg-gray-100"
                       checked={selectedGroups.includes(g.id)}
                       onChange={() => toggleGroup(g.id)}
                     />
-                    <span className="text-sm text-gray-200 truncate select-none">{g.title}</span>
+                    <span className="text-sm text-gray-800 truncate select-none">{g.title}</span>
                   </label>
                 ))
               )}
             </div>
 
-            <button onClick={extractMembers} disabled={isGroupsLoading} className="w-full shrink-0 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 p-3 rounded text-gray-200 font-semibold transition-colors">
+            <button onClick={extractMembers} disabled={isGroupsLoading} className="w-full shrink-0 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 p-3 rounded text-gray-800 font-semibold transition-colors">
               Extract Members
             </button>
             {members.length > 0 && (
@@ -571,18 +571,18 @@ return (
                     onChange={e => setSkipCount(e.target.checked ? 1 : 0)}
                     className="w-4 h-4 rounded border-gray-500 text-blue-400"
                   />
-                  <span className="text-xs text-gray-300 font-medium">Skip starting members</span>
+                  <span className="text-xs text-gray-600 font-medium">Skip starting members</span>
                 </label>
                 {Number(skipCount) > 0 && (
                   <div>
                     <div className="flex items-center gap-2">
-                      <label className="text-xs text-gray-400 font-medium whitespace-nowrap">Skip first</label>
+                      <label className="text-xs text-gray-500 font-medium whitespace-nowrap">Skip first</label>
                       <input
                         type="number" min={1} max={members.length - 1} value={skipCount}
                         onChange={e => setSkipCount(e.target.value)}
-                        className="w-20 bg-gray-700 border border-gray-600 text-gray-100 p-1.5 rounded text-sm outline-none focus:ring-2 focus:ring-blue-400"
+                        className="w-20 bg-gray-100 border border-gray-300 text-gray-900 p-1.5 rounded text-sm outline-none focus:ring-2 focus:ring-blue-400"
                       />
-                      <label className="text-xs text-gray-400 font-medium whitespace-nowrap">members</label>
+                      <label className="text-xs text-gray-500 font-medium whitespace-nowrap">members</label>
                     </div>
                     <p className="text-xs text-orange-400 mt-1">⚠️ First {skipCount} skipped. Sending to {members.length - Number(skipCount)} members. Counter: {skipCount}/{members.length}</p>
                   </div>
@@ -591,20 +591,20 @@ return (
             )}
           </div>
 
-          <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700 shadow-sm">
-             <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-gray-100"><Settings className="text-purple-400" /> Settings</h2>
+          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+             <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-gray-900"><Settings className="text-purple-400" /> Settings</h2>
 
              {/* Mode Toggle */}
-             <div className="flex gap-2 mb-4 bg-gray-700 p-1 rounded-lg">
+             <div className="flex gap-2 mb-4 bg-gray-100 p-1 rounded-lg">
                <button
                  onClick={() => setUseManualDelay(false)}
-                 className={`flex-1 py-2 px-3 rounded-md text-sm font-semibold transition-colors ${!useManualDelay ? 'bg-gray-600 shadow text-purple-400' : 'text-gray-400'}`}
+                 className={`flex-1 py-2 px-3 rounded-md text-sm font-semibold transition-colors ${!useManualDelay ? 'bg-gray-200 shadow text-purple-400' : 'text-gray-500'}`}
                >
                  ⏱ Auto (Hours/Min)
                </button>
                <button
                  onClick={() => setUseManualDelay(true)}
-                 className={`flex-1 py-2 px-3 rounded-md text-sm font-semibold transition-colors ${useManualDelay ? 'bg-gray-600 shadow text-orange-400' : 'text-gray-400'}`}
+                 className={`flex-1 py-2 px-3 rounded-md text-sm font-semibold transition-colors ${useManualDelay ? 'bg-gray-200 shadow text-orange-400' : 'text-gray-500'}`}
                >
                  ⚡ Manual (Seconds)
                </button>
@@ -613,33 +613,33 @@ return (
              {useManualDelay ? (
                /* Manual Delay Mode */
                <div>
-                 <label className="block text-gray-300 font-medium text-sm mb-2">Delay Between Messages (seconds)</label>
+                 <label className="block text-gray-600 font-medium text-sm mb-2">Delay Between Messages (seconds)</label>
                  <input type="number" min={1} step={1} value={manualDelay} onChange={e => setManualDelay(e.target.value)}
-                   className="w-full bg-gray-700 border border-gray-600 text-gray-100 p-3 rounded mb-3 outline-none focus:ring-2 focus:ring-orange-400" />
+                   className="w-full bg-gray-100 border border-gray-300 text-gray-900 p-3 rounded mb-3 outline-none focus:ring-2 focus:ring-orange-400" />
                  {isRunning && (
                    <button onClick={updateDelay} className="w-full bg-orange-900 text-orange-300 hover:bg-orange-800 p-2 rounded font-semibold text-sm transition-colors">
                      🔄 Update Delay Live
                    </button>
                  )}
-                 <p className="text-xs text-gray-400 mt-2">Campaign chalte waqt bhi delay change kar sakte ho</p>
+                 <p className="text-xs text-gray-500 mt-2">Campaign chalte waqt bhi delay change kar sakte ho</p>
                </div>
              ) : (
                /* Auto Duration Mode */
                <div>
                  <div className="flex gap-4 mb-4">
                    <label className="flex items-center gap-2 cursor-pointer">
-                     <input type="radio" className="text-purple-400 focus:ring-purple-500 bg-gray-700 border-gray-500" checked={durationType === 'hours'} onChange={() => setDurationType('hours')} />
-                     <span className="text-sm text-gray-300 font-medium">Hours</span>
+                     <input type="radio" className="text-purple-400 focus:ring-purple-500 bg-gray-100 border-gray-500" checked={durationType === 'hours'} onChange={() => setDurationType('hours')} />
+                     <span className="text-sm text-gray-600 font-medium">Hours</span>
                    </label>
                    <label className="flex items-center gap-2 cursor-pointer">
-                     <input type="radio" className="text-purple-400 focus:ring-purple-500 bg-gray-700 border-gray-500" checked={durationType === 'minutes'} onChange={() => setDurationType('minutes')} />
-                     <span className="text-sm text-gray-300 font-medium">Minutes</span>
+                     <input type="radio" className="text-purple-400 focus:ring-purple-500 bg-gray-100 border-gray-500" checked={durationType === 'minutes'} onChange={() => setDurationType('minutes')} />
+                     <span className="text-sm text-gray-600 font-medium">Minutes</span>
                    </label>
                  </div>
-                 <label className="block text-gray-300 font-medium text-sm mb-2">Duration ({durationType === 'hours' ? 'Hours' : 'Minutes'})</label>
+                 <label className="block text-gray-600 font-medium text-sm mb-2">Duration ({durationType === 'hours' ? 'Hours' : 'Minutes'})</label>
                  <input type="number" min={0.1} step={0.1} value={durationValue} onChange={e => setDurationValue(e.target.value)}
-                   className="w-full bg-gray-700 border border-gray-600 text-gray-100 p-3 rounded mb-4 outline-none focus:ring-2 focus:ring-purple-500" />
-                 <label className="block text-gray-300 font-medium text-sm mb-2">Estimated Delay</label>
+                   className="w-full bg-gray-100 border border-gray-300 text-gray-900 p-3 rounded mb-4 outline-none focus:ring-2 focus:ring-purple-500" />
+                 <label className="block text-gray-600 font-medium text-sm mb-2">Estimated Delay</label>
                  <div className="bg-blue-900 border border-blue-700 p-3 rounded text-blue-300 font-mono font-medium">
                    {members.length ? estimatedDelay : 0} seconds / msg
                  </div>
@@ -647,11 +647,11 @@ return (
              )}
            </div>
 
-           <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700 shadow-sm md:col-span-2">
-             <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-gray-100"><Edit3 className="text-green-400" /> Message Template</h2>
+           <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm md:col-span-2">
+             <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-gray-900"><Edit3 className="text-green-400" /> Message Template</h2>
              <textarea
                value={message} onChange={e => setMessage(e.target.value)}
-               className="w-full h-32 bg-gray-700 border border-gray-600 text-gray-100 p-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 mb-4 resize-none"
+               className="w-full h-32 bg-gray-100 border border-gray-300 text-gray-900 p-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 mb-4 resize-none"
                placeholder="Type your message here..."></textarea>
 
              <button onClick={updateMessage} className="bg-green-900 text-green-300 hover:bg-green-800 px-6 py-2 rounded-lg font-semibold transition-colors">
@@ -659,18 +659,18 @@ return (
              </button>
            </div>
 
-           <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700 shadow-sm md:col-span-2 flex flex-col md:flex-row items-center justify-between gap-6">
+           <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm md:col-span-2 flex flex-col md:flex-row items-center justify-between gap-6">
              <div className="text-center md:text-left">
-               <h2 className="text-2xl font-bold mb-2 text-gray-100">Campaign Status</h2>
+               <h2 className="text-2xl font-bold mb-2 text-gray-900">Campaign Status</h2>
                {campaignStatus ? (
                  <div>
-                   <p className="text-gray-300 font-medium">Status: <span className={campaignStatus.status === 'Sending' ? 'text-green-400' : 'text-yellow-400'}>{campaignStatus.status}</span></p>
-                   <p className="text-gray-300 font-medium">Sent: {campaignStatus.sentCount || 0} / {campaignStatus.totalUsers || 0}</p>
+                   <p className="text-gray-600 font-medium">Status: <span className={campaignStatus.status === 'Sending' ? 'text-green-400' : 'text-yellow-400'}>{campaignStatus.status}</span></p>
+                   <p className="text-gray-600 font-medium">Sent: {campaignStatus.sentCount || 0} / {campaignStatus.totalUsers || 0}</p>
                    {(campaignStatus.sentCount || 0) < (campaignStatus.totalUsers || 0) && campaignStatus.status === 'Sending' && (
-                     <p className="text-xs text-gray-400">Remaining: {(campaignStatus.totalUsers || 0) - (campaignStatus.sentCount || 0)} users</p>
+                     <p className="text-xs text-gray-500">Remaining: {(campaignStatus.totalUsers || 0) - (campaignStatus.sentCount || 0)} users</p>
                    )}
                  </div>
-               ) : <p className="text-gray-400">Not started</p>}
+               ) : <p className="text-gray-500">Not started</p>}
              </div>
 
              <div className="flex gap-4 w-full md:w-auto">
