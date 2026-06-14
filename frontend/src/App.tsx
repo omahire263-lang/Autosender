@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
-import { Play, Square, Edit3, Users, Settings, Phone, Key, LogOut } from 'lucide-react';
+import { Play, Square, Edit3, Users, Settings, Phone, Key, LogOut, MessageCircle } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 axios.defaults.withCredentials = true;
@@ -36,6 +36,7 @@ const getErrorMessage = (error: unknown, fallback: string) => {
 };
 
 function App() {
+  const [platform, setPlatform] = useState<'NONE' | 'TELEGRAM' | 'WHATSAPP'>('NONE');
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [sessionString, setSessionString] = useState('');
@@ -347,6 +348,63 @@ function App() {
       setIsRunning(false);
     }
   };
+
+  if (platform === 'NONE') {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-900 text-gray-100 p-4">
+        <h1 className="text-4xl font-extrabold mb-12 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-green-400 text-center">
+          Choose Platform
+        </h1>
+        <div className="flex flex-col sm:flex-row gap-6 w-full max-w-3xl">
+          <button 
+            onClick={() => setPlatform('TELEGRAM')}
+            className="flex-1 bg-gray-800 hover:bg-gray-700 border border-blue-500/30 hover:border-blue-500 p-10 rounded-3xl flex flex-col items-center justify-center gap-6 transition-all group shadow-lg"
+          >
+            <div className="p-6 bg-blue-500/10 rounded-full group-hover:scale-110 transition-transform">
+              <Users size={64} className="text-blue-400" />
+            </div>
+            <h2 className="text-3xl font-bold text-gray-100">Telegram</h2>
+            <p className="text-gray-400 text-center text-sm px-4">Automate group extractions and bulk messaging securely.</p>
+          </button>
+
+          <button 
+            onClick={() => setPlatform('WHATSAPP')}
+            className="flex-1 bg-gray-800 hover:bg-gray-700 border border-green-500/30 hover:border-green-500 p-10 rounded-3xl flex flex-col items-center justify-center gap-6 transition-all group shadow-lg"
+          >
+            <div className="p-6 bg-green-500/10 rounded-full group-hover:scale-110 transition-transform">
+              <MessageCircle size={64} className="text-green-400" />
+            </div>
+            <h2 className="text-3xl font-bold text-gray-100">WhatsApp</h2>
+            <p className="text-gray-400 text-center text-sm px-4">Link via phone number (8-digit code) and automate campaigns.</p>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (platform === 'WHATSAPP') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-900 text-gray-100 p-4">
+        <div className="bg-gray-800 p-8 rounded-2xl shadow-2xl w-full max-w-md border border-green-700/50 text-center">
+          <div className="flex justify-center mb-6"><MessageCircle size={56} className="text-green-400" /></div>
+          <h2 className="text-2xl font-bold mb-3">WhatsApp Automation</h2>
+          <p className="text-gray-400 mb-8 text-sm px-2">
+            Enter your phone number to receive an 8-digit linking code on your WhatsApp app. No QR scan needed!
+          </p>
+          <input type="text" placeholder="Phone Number (e.g. +91...)"
+            className="w-full bg-gray-700 p-4 rounded-xl mb-4 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-100 placeholder-gray-400"
+          />
+          <button className="w-full bg-green-600 text-white hover:bg-green-700 p-4 rounded-xl font-bold transition-colors">
+            Get 8-Digit Pairing Code
+          </button>
+          
+          <button onClick={() => setPlatform('NONE')} className="mt-6 text-gray-500 hover:text-gray-300 underline text-sm transition-colors">
+            Go Back to Selection
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
