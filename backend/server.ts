@@ -589,8 +589,8 @@ async function runCampaign() {
     try {
       const uniqueMessage = antiBanSpin(campaign.message);
       console.log(`Sending to ${userId}...`);
-      let peer: any = userId;
-      if (/^-?\d+$/.test(userId)) peer = BigInt(userId);
+      // Resolve user ID to InputPeer
+      const peer = await activeClient.getInputEntity(userId);
       await activeClient.sendMessage(peer, { message: uniqueMessage });
       campaign.sent++;
       console.log(`Sent successfully. Total sent: ${campaign.sent}`);
@@ -600,7 +600,8 @@ async function runCampaign() {
       }, { merge: true });
     } catch (error: any) {
       console.error('Failed to send to', userId, error?.message || error);
-      campaign.failed++; try { await db.collection('campaigns').doc(campaign.dbId).update({ lastError: error?.message || String(error) }); } catch(e) {}
+      campaign.failed++;
+      try { await db.collection('campaigns').doc(campaign.dbId).update({ lastError: error?.message || String(error) }); } catch(e) {}
     }
 
     try {
