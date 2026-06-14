@@ -666,7 +666,7 @@ async function runCampaign() {
       }, { merge: true });
     } catch (error: any) {
       console.error('Failed to send to', userId, error?.message || error);
-      campaign.failed++;
+      campaign.failed++; try { await db.collection('campaigns').doc(campaign.dbId).update({ lastError: error?.message || String(error) }); } catch(e) {}
     }
 
     try {
