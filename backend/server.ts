@@ -479,13 +479,24 @@ app.post('/api/campaign/start', async (req, res) => {
     
     isCampaignRunning = true;
     res.json({ success: true, campaignId: campaignRef.id });
-    runCampaign();
-  } catch (error) {
-    res.status(500).json({ error: getErrorMessage(error) });
-  }
-});
+runCampaign();
+    } catch (error) {
+      res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
 
-app.post('/api/campaign/resume', async (req, res) => {
+  // Pause the current campaign (allow resume later)
+  app.post('/api/campaign/pause-all', async (req, res) => {
+    isCampaignRunning = false;
+    if (currentCampaign) {
+      currentCampaign.isRunning = false;
+      const db = getDb();
+      await db.collection('campaigns').doc(currentCampaign.dbId).update({ status: 'Paused' }).catch(() => {});
+    }
+    res.json({ success: true });
+  });
+
+  app.post('/api/campaign/resume', async (req, res) => {
   if (isCampaignRunning) return res.json({ success: true });
   await resumeCampaigns();
   res.json({ success: true });
