@@ -608,7 +608,7 @@ async function runCampaign() {
       // Resolve user ID to InputPeer
       let peer;
       try {
-        peer = await activeClient.getInputEntity(BigInt(userId));
+        peer = await activeClient.getInputEntity(BigInt(userId) as any);
       } catch (e) {
         peer = await activeClient.getInputEntity(userId);
       }
