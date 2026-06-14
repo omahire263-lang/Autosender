@@ -346,16 +346,7 @@ function App() {
     }
   };
 
-  const resumeCampaign = async () => {
-    try {
-      await axios.post(`${API_URL}/campaign/resume`);
-      setIsRunning(true);
-      await fetchStatus();
-      await fetchHistory();
-    } catch (error) {
-      alert(`Failed to resume: ${getErrorMessage(error, 'Something went wrong')}`);
-    }
-  };
+
 
   const updateMessage = async () => {
     try {
