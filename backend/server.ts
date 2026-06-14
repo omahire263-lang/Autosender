@@ -661,12 +661,17 @@ async function runCampaign(campaignId: string) {
     }
 
     try {
-      await db.collection('campaigns').doc(campaign.dbId).update({
+      const updateData: any = {
         sentCount: campaign.sent,
         failedCount: campaign.failed,
-        status: campaign.users.length === 0 ? 'Completed' : 'Sending',
         remainingUsers: JSON.stringify(campaign.users)
-      });
+      };
+      if (campaign.users.length === 0) {
+        updateData.status = 'Completed';
+      } else if (campaign.isRunning) {
+        updateData.status = 'Sending';
+      }
+      await db.collection('campaigns').doc(campaign.dbId).update(updateData);
     } catch (e) {
       console.error('Failed to update DB', e);
     }
