@@ -628,12 +628,41 @@ async function runCampaign() {
 
     const baseMs = campaign.baseDelay * 1000;
     const variation = baseMs * 0.2; // ±20% variation for natural timing
-    const delay = Math.max(500, baseMs + (Math.random() * variation * 2 - variation));
+const delay = Math.max(500, baseMs + (Math.random() * variation * 2 - variation));
     await sleep(delay);
   }
 }
 
-
+async function resumeCampaigns() {
+  if (isCampaignRunning) return;
+  const db = getDb();
+  const cSnap = await db.collection('campaigns').where('status', '==', 'Sending').limit(1).get();
+  if (cSnap.empty) return;
+  
+  const doc = cSnap.docs[0];
+  const activeDbCampaign = { id: doc.id, ...(doc.data()) } as any;
+  if (activeDbCampaign.remainingUsers) {
+    try {
+      const remaining = JSON.parse(activeDbCampaign.remainingUsers);
+      if (remaining.length > 0) {
+          currentCampaign = {
+              dbId: activeDbCampaign.id,
+              message: activeDbCampaign.message,
+              users: remaining,
+              sent: activeDbCampaign.sentCount || 0,
+              failed: activeDbCampaign.failedCount || 0,
+              baseDelay: activeDbCampaign.baseDelay || ((activeDbCampaign.estimatedTime || 3600) / (activeDbCampaign.totalUsers || 1)),
+              isRunning: true
+          };
+          isCampaignRunning = true;
+          console.log('Resuming campaign from DB', currentCampaign.dbId);
+          runCampaign();
+      }
+    } catch (e) {
+      console.error('Failed to resume campaign', e);
+    }
+  }
+}
 
 initDb().then(async () => {
   console.log('Firebase DB initialized');
