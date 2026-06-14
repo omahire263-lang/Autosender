@@ -278,8 +278,10 @@ function App() {
       const res = await axios.post<{ members: Member[]; stats: MemberStats }>(`${API_URL}/telegram/members`, { groupIds: selectedGroups });
       setAllExtractedMembers(res.data.members);
       setMemberStats(res.data.stats);
-      setMembers(res.data.members);
-      setActiveFilter('all');
+      
+      const activeMembers = res.data.members.filter(m => m.status === 'activeToday' || m.status === 'activeWeek');
+      setMembers(activeMembers);
+      setActiveFilter('active');
     } catch (error) {
       alert(`Failed to extract members: ${getErrorMessage(error, 'Something went wrong')}`);
     }
