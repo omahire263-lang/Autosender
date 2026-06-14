@@ -36,7 +36,7 @@ app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'ok', 
     clientConnected: !!client,
-    campaignRunning: isCampaignRunning,
+    campaignRunning: activeCampaigns.size > 0,
     timestamp: new Date().toISOString()
   });
 });
@@ -159,7 +159,7 @@ app.post('/api/auth/login', async (req, res) => {
       activeSessionToken = sessionToken;
       setSessionCookie(res, sessionToken);
 
-      if (!isCampaignRunning) resumeCampaigns();
+      resumeCampaigns();
 
       res.json({
         success: true,
@@ -215,7 +215,7 @@ app.post('/api/auth/login', async (req, res) => {
     activeSessionToken = sessionToken;
     setSessionCookie(res, sessionToken);
 
-    if (!isCampaignRunning) resumeCampaigns();
+    resumeCampaigns();
 
     res.json({
       success: true,
@@ -262,7 +262,7 @@ app.post('/api/auth/init', async (req, res) => {
     client = nextClient;
     activeSessionToken = sessionToken;
 
-    if (!isCampaignRunning) resumeCampaigns();
+    resumeCampaigns();
 
     res.json({
       success: true,
@@ -527,10 +527,12 @@ app.post('/api/campaign/update-delay', async (req, res) => {
     return res.status(400).json({ error: 'Valid delay in seconds is required' });
   }
 
-  if (currentCampaign) {
-    currentCampaign.baseDelay = delaySeconds;
+  if (activeCampaigns.size > 0) {
     const db = getDb();
-    await db.collection('campaigns').doc(currentCampaign.dbId).update({ baseDelay: delaySeconds });
+    for (const [id, campaign] of activeCampaigns.entries()) {
+      campaign.baseDelay = delaySeconds;
+      await db.collection('campaigns').doc(id).update({ baseDelay: delaySeconds }).catch(() => {});
+    }
   }
 
   res.json({ success: true });
@@ -543,10 +545,12 @@ app.post('/api/campaign/update-message', async (req, res) => {
     return res.status(400).json({ error: 'Message is required' });
   }
 
-  if (currentCampaign) {
-    currentCampaign.message = messageText;
+  if (activeCampaigns.size > 0) {
     const db = getDb();
-    await db.collection('campaigns').doc(currentCampaign.dbId).update({ message: messageText });
+    for (const [id, campaign] of activeCampaigns.entries()) {
+      campaign.message = messageText;
+      await db.collection('campaigns').doc(id).update({ message: messageText }).catch(() => {});
+    }
   }
 
   res.json({ success: true });
