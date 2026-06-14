@@ -744,8 +744,7 @@ initDb().then(async () => {
   const reconnectClient = async () => {
     if (client && activeSessionToken) {
       try {
-        const me = await client.getMe();
-        if (!me) throw new Error('Client disconnected');
+        await client.getMe();
       } catch (err) {
         console.log('Client disconnected, attempting reconnect...');
         try {
@@ -759,6 +758,8 @@ initDb().then(async () => {
               await nextClient.connect();
               client = nextClient;
               console.log('Reconnected successfully');
+              // Resume campaign if one was in progress
+              await resumeCampaigns();
             }
           }
         } catch (reconnectErr) {
