@@ -485,24 +485,6 @@ app.post('/api/campaign/start', async (req, res) => {
   }
 });
 
-app.post('/api/campaign/pause-all', async (req, res) => {
-  isCampaignRunning = false;
-  if (currentCampaign) {
-    currentCampaign.isRunning = false;
-    const db = getDb();
-    await db.collection('campaigns').doc(currentCampaign.dbId).update({ status: 'Paused' }).catch(() => {});
-  }
-  currentCampaign = null;
-
-  const db = getDb();
-  const snap = await db.collection('campaigns').where('status', '==', 'Sending').get();
-  for (const doc of snap.docs) {
-    await db.collection('campaigns').doc(doc.id).update({ status: 'Paused' }).catch(() => {});
-  }
-
-  res.json({ success: true });
-});
-
 app.post('/api/campaign/resume', async (req, res) => {
   if (isCampaignRunning) return res.json({ success: true });
   await resumeCampaigns();
