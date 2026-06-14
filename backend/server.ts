@@ -659,7 +659,7 @@ initDb().then(async () => {
               client = nextClient;
               console.log('Reconnected successfully');
               // Resume campaign if one was in progress
-              
+              resumeCampaigns();
             }
           }
         } catch (reconnectErr) {
