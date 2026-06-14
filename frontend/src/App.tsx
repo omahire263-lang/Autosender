@@ -44,6 +44,7 @@ function App() {
   const [dashboardUser, setDashboardUser] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loginMethod, setLoginMethod] = useState<'otp' | 'session'>('otp');
+  const [loggedInSessionString, setLoggedInSessionString] = useState('');
 
   const [groups, setGroups] = useState<Group[]>([]);
   const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
@@ -195,7 +196,7 @@ function App() {
       
       // Show session string for backup
       if (res.data.sessionString) {
-        alert(`Login successful! Save this session string for future use:\n\n${res.data.sessionString}\n\n(It's also saved on the server)`);
+        setLoggedInSessionString(res.data.sessionString);
       }
       
       setStep('DASHBOARD');
@@ -472,7 +473,17 @@ return (
         </div>
 
         {dashboardUser && (
-          <p className="text-gray-400 text-center sm:text-left">Logged in as: <span className="text-gray-100 font-semibold">{dashboardUser}</span></p>
+          <div className="flex flex-col sm:flex-row items-center justify-between bg-gray-800 p-4 rounded-lg border border-gray-700">
+            <p className="text-gray-400 text-center sm:text-left mb-4 sm:mb-0">Logged in as: <span className="text-gray-100 font-semibold">{dashboardUser}</span></p>
+            {loggedInSessionString && (
+              <div className="flex items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0">
+                <input type="password" readOnly value={loggedInSessionString} className="bg-gray-900 border border-gray-600 rounded p-2 text-sm text-gray-400 w-full sm:w-48 font-mono outline-none" placeholder="Session String" />
+                <button onClick={() => { navigator.clipboard.writeText(loggedInSessionString); alert('Copied to clipboard!'); }} className="bg-purple-600 text-white px-3 py-2 rounded text-sm font-semibold hover:bg-purple-700 transition-colors whitespace-nowrap flex items-center gap-1">
+                  <Key size={14}/> Copy Session
+                </button>
+              </div>
+            )}
+          </div>
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
