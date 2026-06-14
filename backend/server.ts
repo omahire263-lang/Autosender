@@ -621,8 +621,9 @@ async function runCampaign() {
       break;
     }
 
-    const randomVariation = campaign.baseDelay > 5 ? (Math.random() * 2000 - 1000) : 0;
-    const delay = Math.max(campaign.baseDelay * 1000 + randomVariation, 500);
+    const baseMs = campaign.baseDelay * 1000;
+    const variation = baseMs * 0.2; // ±20% variation for natural timing
+    const delay = Math.max(500, baseMs + (Math.random() * variation * 2 - variation));
     await sleep(delay);
   }
 }
