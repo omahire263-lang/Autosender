@@ -670,9 +670,10 @@ async function runCampaign() {
       break;
     }
 
+    // Minimum 3 seconds delay to prevent PEER_FLOOD
     const baseMs = campaign.baseDelay * 1000;
-    const variation = baseMs * 0.2; // ±20% variation for natural timing
-const delay = Math.max(500, baseMs + (Math.random() * variation * 2 - variation));
+    const variation = baseMs * 0.3;
+    const delay = Math.max(3000, baseMs + (Math.random() * variation * 2 - variation));
     await sleep(delay);
   }
 }
