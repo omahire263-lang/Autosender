@@ -4,18 +4,18 @@ A simple web app to log in with Telegram, extract group members, and run delayed
 
 ## Features
 
-- Telegram MTProto login using phone number + OTP
-- Session saved in SQLite
+- Telegram MTProto login using phone number + OTP or Session String
+- Session saved in Firebase Firestore
 - Group and channel member extraction
 - Campaign status tracking
-- Live message update while campaign is running
-- Dark React + Tailwind UI
+- Live message/delay update while campaign is running
+- Dark mode UI
 
 ## Tech Stack
 
 - Frontend: React + TypeScript + Vite + Tailwind CSS v4
 - Backend: Node.js + Express + TypeScript + GramJS
-- Database: SQLite
+- Database: Firebase Firestore
 - Telegram client: `telegram` / GramJS
 
 ## Setup Instructions
@@ -70,9 +70,29 @@ A simple web app to log in with Telegram, extract group members, and run delayed
 
 4. Open the app in the browser, usually at `http://localhost:5173`.
 
+## Deployment (Render/Vercel)
+
+### Backend on Render
+1. Create a new Web Service on Render
+2. Set environment variables: `API_ID`, `API_HASH`, `FIREBASE_SERVICE_ACCOUNT`
+3. Use cron-job.org to ping `/api/health` every 5-10 minutes to prevent sleep
+
+### Frontend on Vercel
+1. Push frontend to GitHub
+2. Import project on Vercel
+3. Set `VITE_API_URL` environment variable to your Render backend URL
+
 ## Notes
 
-- This app uses SQLite, not MongoDB.
-- The local SQLite database file is created as `backend/database.sqlite`.
-- Telegram session tokens are stored server-side and are not returned to the frontend.
+- This app uses Firebase Firestore, not SQLite.
+- Telegram session tokens are stored server-side and auto-reused on restart.
+- **Mobile Tip**: Use "Session String" tab on mobile browsers - more reliable than OTP
+- **Session String Login**: When OTP is rate-limited (24hr wait), use the saved session string
 - Use this only with accounts and audiences you are allowed to message.
+
+## Getting Session String
+
+1. Login with OTP on desktop to get your session string
+2. It's saved in Firestore - copy it from login success alert
+3. On mobile: Use "Session String" or "Save Session" tab
+4. Session strings look like: `1Ada...long string...X7kM`

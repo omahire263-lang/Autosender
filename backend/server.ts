@@ -31,6 +31,14 @@ app.use(express.json());
 
 // Health check endpoint for Render
 app.get('/', (req, res) => res.status(200).send('Autosender Backend is running!'));
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    clientConnected: !!client,
+    campaignRunning: isCampaignRunning,
+    timestamp: new Date().toISOString()
+  });
+});
 
 const PORT = Number(process.env.PORT) || 5000;
 const apiId = Number(process.env.API_ID);
@@ -122,6 +130,46 @@ app.post('/api/auth/send-code', async (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
   const phone = typeof req.body.phone === 'string' ? req.body.phone.trim() : '';
   const code = typeof req.body.code === 'string' ? req.body.code.trim() : '';
+  const sessionString = typeof req.body.sessionString === 'string' ? req.body.sessionString.trim() : '';
+
+  // Session-based login (alternative when OTP is rate-limited)
+  if (sessionString && !code) {
+    try {
+      const stringSession = new StringSession(sessionString);
+      const nextClient = new TelegramClient(stringSession, apiId, apiHash, { connectionRetries: 5 });
+      await nextClient.connect();
+
+      const me = await nextClient.getMe();
+      if (!me) {
+        return res.status(401).json({ error: 'Invalid session string' });
+      }
+
+      const sessionToken = crypto.randomUUID();
+      const db = getDb();
+
+      await db.collection('users').doc(phone || me.id?.toString() || sessionToken).set({
+        phoneNumber: phone || '',
+        sessionString,
+        sessionToken,
+        createdAt: FieldValue.serverTimestamp()
+      }, { merge: true });
+
+      client = nextClient;
+      activeSessionToken = sessionToken;
+      setSessionCookie(res, sessionToken);
+
+      if (!isCampaignRunning) resumeCampaigns();
+
+      res.json({
+        success: true,
+        user: me.username || me.firstName || 'User',
+        token: sessionToken
+      });
+    } catch (error) {
+      res.status(400).json({ error: getErrorMessage(error) });
+    }
+    return;
+  }
 
   if (!phone) {
     return res.status(400).json({ error: 'Phone number is required' });
@@ -146,7 +194,7 @@ app.post('/api/auth/login', async (req, res) => {
       }
     );
 
-    const sessionString = (client.session as StringSession).save() as string;
+    const savedSessionString = (client.session as StringSession).save() as string;
     const me = await client.getMe();
 
     if (!me) {
@@ -158,7 +206,7 @@ app.post('/api/auth/login', async (req, res) => {
     
     await db.collection('users').doc(phone).set({
       phoneNumber: phone,
-      sessionString,
+      sessionString: savedSessionString,
       sessionToken,
       createdAt: FieldValue.serverTimestamp()
     }, { merge: true });
@@ -171,7 +219,8 @@ app.post('/api/auth/login', async (req, res) => {
     res.json({
       success: true,
       user: me.username || me.firstName || 'User',
-      token: sessionToken
+      token: sessionToken,
+      sessionString: savedSessionString
     });
   } catch (error) {
     res.status(400).json({ error: getErrorMessage(error) });
@@ -229,6 +278,48 @@ app.post('/api/auth/logout', async (req, res) => {
   activeSessionToken = null;
   clearSessionCookie(res);
   res.json({ success: true });
+});
+
+app.post('/api/auth/save-session', async (req, res) => {
+  const phone = typeof req.body.phone === 'string' ? req.body.phone.trim() : '';
+  const sessionString = typeof req.body.sessionString === 'string' ? req.body.sessionString.trim() : '';
+
+  if (!sessionString) {
+    return res.status(400).json({ error: 'Session string is required' });
+  }
+
+  try {
+    const stringSession = new StringSession(sessionString);
+    const nextClient = new TelegramClient(stringSession, apiId, apiHash, { connectionRetries: 5 });
+    await nextClient.connect();
+
+    const me = await nextClient.getMe();
+    if (!me) {
+      return res.status(401).json({ error: 'Invalid session string' });
+    }
+
+    const newToken = crypto.randomUUID();
+    const db = getDb();
+
+    await db.collection('users').doc(phone || me.id?.toString() || newToken).set({
+      phoneNumber: phone || '',
+      sessionString,
+      sessionToken: newToken,
+      createdAt: FieldValue.serverTimestamp()
+    }, { merge: true });
+
+    client = nextClient;
+    activeSessionToken = newToken;
+    setSessionCookie(res, newToken);
+
+    res.json({
+      success: true,
+      user: me.username || me.firstName || 'User',
+      token: newToken
+    });
+  } catch (error) {
+    res.status(400).json({ error: getErrorMessage(error) });
+  }
 });
 
 app.get('/api/telegram/groups', async (req, res) => {
@@ -566,6 +657,39 @@ initDb().then(async () => {
   console.log('Firebase DB initialized');
   app.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
 
+  // Periodic client health check and reconnect
+  const HEALTH_CHECK_INTERVAL = 1000 * 60 * 5; // 5 minutes
+  const reconnectClient = async () => {
+    if (client && activeSessionToken) {
+      try {
+        const me = await client.getMe();
+        if (!me) throw new Error('Client disconnected');
+      } catch (err) {
+        console.log('Client disconnected, attempting reconnect...');
+        try {
+          const db = getDb();
+          const userSnap = await db.collection('users').where('sessionToken', '==', activeSessionToken).limit(1).get();
+          if (!userSnap.empty) {
+            const user = userSnap.docs[0].data();
+            if (user.sessionString) {
+              const stringSession = new StringSession(user.sessionString);
+              const nextClient = new TelegramClient(stringSession, apiId, apiHash, { connectionRetries: 5 });
+              await nextClient.connect();
+              client = nextClient;
+              console.log('Reconnected successfully');
+            }
+          }
+        } catch (reconnectErr) {
+          console.error('Reconnect failed:', reconnectErr);
+          client = null;
+          activeSessionToken = null;
+        }
+      }
+    }
+  };
+
+  setInterval(reconnectClient, HEALTH_CHECK_INTERVAL);
+
   try {
     const db = getDb();
     const userSnap = await db.collection('users').orderBy('createdAt', 'desc').limit(1).get();
@@ -586,6 +710,4 @@ initDb().then(async () => {
   } catch (err) {
     console.error('Auto-resume failed:', err);
   }
-
-  setInterval(() => {}, 1000 * 60 * 60);
 }).catch(console.error);
