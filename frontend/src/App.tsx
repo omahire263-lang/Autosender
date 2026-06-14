@@ -349,33 +349,33 @@ function App() {
     }
   };
 
-  if (platform === 'NONE') {
+if (platform === 'NONE') {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-900 text-gray-100 p-4">
-        <h1 className="text-4xl font-extrabold mb-12 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-green-400 text-center">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-white text-gray-900 p-4">
+        <h1 className="text-4xl font-extrabold mb-12 text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-green-600 text-center">
           Choose Platform
         </h1>
         <div className="flex flex-col sm:flex-row gap-6 w-full max-w-3xl">
           <button 
             onClick={() => setPlatform('TELEGRAM')}
-            className="flex-1 bg-gray-800 hover:bg-gray-700 border border-blue-500/30 hover:border-blue-500 p-10 rounded-3xl flex flex-col items-center justify-center gap-6 transition-all group shadow-lg"
+            className="flex-1 bg-white border border-blue-300 hover:border-blue-500 p-10 rounded-3xl flex flex-col items-center justify-center gap-6 transition-all group shadow-lg"
           >
-            <div className="p-6 bg-blue-500/10 rounded-full group-hover:scale-110 transition-transform">
-              <Users size={64} className="text-blue-400" />
+            <div className="p-6 bg-blue-100 rounded-full group-hover:scale-110 transition-transform">
+              <Users size={64} className="text-blue-600" />
             </div>
-            <h2 className="text-3xl font-bold text-gray-100">Telegram</h2>
-            <p className="text-gray-400 text-center text-sm px-4">Automate group extractions and bulk messaging securely.</p>
+            <h2 className="text-3xl font-bold text-gray-800">Telegram</h2>
+            <p className="text-gray-600 text-center text-sm px-4">Automate group extractions and bulk messaging securely.</p>
           </button>
 
           <button 
             onClick={() => setPlatform('WHATSAPP')}
-            className="flex-1 bg-gray-800 hover:bg-gray-700 border border-green-500/30 hover:border-green-500 p-10 rounded-3xl flex flex-col items-center justify-center gap-6 transition-all group shadow-lg"
+            className="flex-1 bg-white border border-green-300 hover:border-green-500 p-10 rounded-3xl flex flex-col items-center justify-center gap-6 transition-all group shadow-lg"
           >
-            <div className="p-6 bg-green-500/10 rounded-full group-hover:scale-110 transition-transform">
-              <MessageCircle size={64} className="text-green-400" />
+            <div className="p-6 bg-green-100 rounded-full group-hover:scale-110 transition-transform">
+              <MessageCircle size={64} className="text-green-600" />
             </div>
-            <h2 className="text-3xl font-bold text-gray-100">WhatsApp</h2>
-            <p className="text-gray-400 text-center text-sm px-4">Link via phone number (8-digit code) and automate campaigns.</p>
+            <h2 className="text-3xl font-bold text-gray-800">WhatsApp</h2>
+            <p className="text-gray-600 text-center text-sm px-4">Link via phone number (8-digit code) and automate campaigns.</p>
           </button>
         </div>
       </div>
@@ -384,21 +384,21 @@ function App() {
 
   if (platform === 'WHATSAPP') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-900 text-gray-100 p-4">
-        <div className="bg-gray-800 p-8 rounded-2xl shadow-2xl w-full max-w-md border border-green-700/50 text-center">
-          <div className="flex justify-center mb-6"><MessageCircle size={56} className="text-green-400" /></div>
+      <div className="min-h-screen flex items-center justify-center bg-white text-gray-900 p-4">
+        <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md border border-green-300 text-center">
+          <div className="flex justify-center mb-6"><MessageCircle size={56} className="text-green-600" /></div>
           <h2 className="text-2xl font-bold mb-3">WhatsApp Automation</h2>
-          <p className="text-gray-400 mb-8 text-sm px-2">
+          <p className="text-gray-600 mb-8 text-sm px-2">
             Enter your phone number to receive an 8-digit linking code on your WhatsApp app. No QR scan needed!
           </p>
           <input type="text" placeholder="Phone Number (e.g. +91...)"
-            className="w-full bg-gray-700 p-4 rounded-xl mb-4 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-100 placeholder-gray-400"
+            className="w-full bg-gray-100 p-4 rounded-xl mb-4 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900 placeholder-gray-500"
           />
           <button className="w-full bg-green-600 text-white hover:bg-green-700 p-4 rounded-xl font-bold transition-colors">
             Get 8-Digit Pairing Code
           </button>
           
-          <button onClick={() => setPlatform('NONE')} className="mt-6 text-gray-500 hover:text-gray-300 underline text-sm transition-colors">
+          <button onClick={() => setPlatform('NONE')} className="mt-6 text-gray-500 hover:text-gray-700 underline text-sm transition-colors">
             Go Back to Selection
           </button>
         </div>
@@ -414,18 +414,17 @@ function App() {
     );
   }
 
-  if (step === 'PHONE') {
+if (step === 'PHONE') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-900 text-gray-100">
-        <div className="bg-gray-800 p-8 rounded-xl shadow-2xl w-96 border border-gray-700">
+      <div className="min-h-screen flex items-center justify-center bg-white text-gray-900">
+        <div className="bg-white p-8 rounded-xl shadow-2xl w-96 border border-gray-300">
           <div className="flex justify-center mb-6"><Phone size={48} className="text-blue-500" /></div>
           <h2 className="text-2xl font-bold mb-6 text-center">Telegram Login</h2>
 
-          {/* Login Method Toggle */}
           <div className="mb-6">
-            <label className="block text-sm text-gray-400 mb-2">Login with OTP</label>
+            <label className="block text-sm text-gray-600 mb-2">Login with OTP</label>
             <input type="text" placeholder="Phone Number (e.g. +123456789)"
-              className="w-full bg-gray-700 p-3 rounded mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-100 placeholder-gray-400"
+              className="w-full bg-gray-100 p-3 rounded mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 placeholder-gray-500"
               value={phone} onChange={e => setPhone(e.target.value)} />
             <button onClick={handleSendCode} className="w-full bg-blue-600 text-white hover:bg-blue-700 p-3 rounded font-semibold transition-colors">
               Send Code
@@ -433,44 +432,44 @@ function App() {
           </div>
 
           <div className="flex items-center my-6">
-            <div className="flex-1 border-t border-gray-600"></div>
+            <div className="flex-1 border-t border-gray-300"></div>
             <span className="px-4 text-gray-500 text-sm font-semibold">OR</span>
-            <div className="flex-1 border-t border-gray-600"></div>
+            <div className="flex-1 border-t border-gray-300"></div>
           </div>
 
           <div>
-            <label className="block text-sm text-gray-400 mb-2">Login with Backup String</label>
+            <label className="block text-sm text-gray-600 mb-2">Login with Backup String</label>
             <input type="password" placeholder="Paste Session String (317...)"
-              className="w-full bg-gray-700 p-3 rounded mb-3 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-100 placeholder-gray-400 font-mono text-sm"
+              className="w-full bg-gray-100 p-3 rounded mb-3 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900 placeholder-gray-500 font-mono text-sm"
               value={sessionString} onChange={e => setSessionString(e.target.value)} />
             <button onClick={() => { setLoginMethod('session'); setTimeout(handleLogin, 50); }} className="w-full bg-green-600 text-white hover:bg-green-700 p-3 rounded font-semibold transition-colors flex items-center justify-center gap-2">
               <Key size={18} /> Login with Session String
             </button>
           </div>
         </div>
-       </div>
-     );
-   }
+      </div>
+    );
+  }
 
 if (step === 'SAVE_SESSION') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-900 text-gray-100">
-        <div className="bg-gray-800 p-8 rounded-xl shadow-2xl w-96 border border-gray-700">
+      <div className="min-h-screen flex items-center justify-center bg-white text-gray-900">
+        <div className="bg-white p-8 rounded-xl shadow-2xl w-96 border border-gray-300">
           <div className="flex justify-center mb-6"><Key size={48} className="text-purple-500" /></div>
           <h2 className="text-2xl font-bold mb-6 text-center">Save Session</h2>
           {loginError && (
-            <div className="bg-red-900 text-red-300 p-3 rounded mb-4 text-sm font-medium border border-red-700">
+            <div className="bg-red-100 text-red-700 p-3 rounded mb-4 text-sm font-medium border border-red-300">
               {loginError}
             </div>
           )}
           <input type="text" placeholder="Phone (optional)"
-            className="w-full bg-gray-700 p-3 rounded mb-3 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-100 placeholder-gray-400"
+            className="w-full bg-gray-100 p-3 rounded mb-3 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900 placeholder-gray-500"
             value={phone} onChange={e => setPhone(e.target.value)} />
           <input type="password" placeholder="Session String (317XXXXXXXXXXXXXXX...)"
-            className="w-full bg-gray-700 p-3 rounded mb-4 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-100 placeholder-gray-400 font-mono text-sm"
+            className="w-full bg-gray-100 p-3 rounded mb-4 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900 placeholder-gray-500 font-mono text-sm"
             value={sessionString} onChange={e => setSessionString(e.target.value)} />
           <div className="flex gap-2">
-            <button onClick={() => setStep('PHONE')} className="flex-1 bg-gray-700 text-gray-300 hover:bg-gray-600 p-2 rounded transition-colors">
+            <button onClick={() => setStep('PHONE')} className="flex-1 bg-gray-200 text-gray-700 hover:bg-gray-300 p-2 rounded transition-colors">
               Back
             </button>
             <button onClick={handleSaveSession} className="flex-1 bg-purple-600 text-white hover:bg-purple-700 p-3 rounded font-semibold transition-colors">
@@ -484,17 +483,17 @@ if (step === 'SAVE_SESSION') {
 
   if (step === 'CODE') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-900 text-gray-100">
-        <div className="bg-gray-800 p-8 rounded-xl shadow-2xl w-96 border border-gray-700">
+      <div className="min-h-screen flex items-center justify-center bg-white text-gray-900">
+        <div className="bg-white p-8 rounded-xl shadow-2xl w-96 border border-gray-300">
           <div className="flex justify-center mb-6"><Key size={48} className="text-blue-500" /></div>
           <h2 className="text-2xl font-bold mb-6 text-center">Enter Code</h2>
           {loginError && (
-            <div className="bg-red-900 text-red-300 p-3 rounded mb-4 text-sm font-medium border border-red-700">
+            <div className="bg-red-100 text-red-700 p-3 rounded mb-4 text-sm font-medium border border-red-300">
               {loginError}
             </div>
           )}
           <input type="text" placeholder="5-digit code"
-            className="w-full bg-gray-700 p-3 rounded mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-100 placeholder-gray-400"
+            className="w-full bg-gray-100 p-3 rounded mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 placeholder-gray-500"
             value={code} onChange={e => setCode(e.target.value)} />
           <button onClick={handleLogin} className="w-full bg-blue-600 text-white hover:bg-blue-700 p-3 rounded font-semibold transition-colors">
             Login
