@@ -353,15 +353,30 @@ app.post('/api/telegram/members', async (req, res) => {
       return res.status(400).json({ error: 'Select at least one group' });
     }
 
-    let allMembers: Array<{ id: string; username?: string; firstName?: string }> = [];
+    let allMembers: Array<{ id: string; username?: string; firstName?: string; status: string; isBot: boolean; isDeleted: boolean }> = [];
 
     for (const id of ids) {
       const participants = await activeClient.getParticipants(id, { limit: 5000 });
-      const members = participants.map(p => ({
-        id: p.id?.toString() || '',
-        username: p.username,
-        firstName: p.firstName
-      })).filter(member => member.id.length > 0);
+      const members = participants.map((p: any) => {
+        const statusClass = p.status?.className || '';
+        let status = 'unknown';
+        if (p.bot) status = 'bot';
+        else if (p.deleted) status = 'deleted';
+        else if (statusClass === 'UserStatusOnline') status = 'activeToday';
+        else if (statusClass === 'UserStatusRecently') status = 'activeToday';
+        else if (statusClass === 'UserStatusLastWeek') status = 'activeWeek';
+        else if (statusClass === 'UserStatusLastMonth') status = 'inactive';
+        else if (statusClass === 'UserStatusEmpty') status = 'unknown';
+
+        return {
+          id: p.id?.toString() || '',
+          username: p.username,
+          firstName: p.firstName,
+          status,
+          isBot: !!p.bot,
+          isDeleted: !!p.deleted
+        };
+      }).filter((member: any) => member.id.length > 0);
 
       allMembers = [...allMembers, ...members];
     }
@@ -372,9 +387,20 @@ app.post('/api/telegram/members', async (req, res) => {
     const sentSnapshot = await db.collection('sent_users').get();
     const sentUserIds = new Set(sentSnapshot.docs.map((doc: any) => doc.id));
 
-    const finalMembers = uniqueMembers.filter(m => !sentUserIds.has(m.id));
+    const finalMembers = uniqueMembers.filter(m => !sentUserIds.has(m.id) && !m.isBot && !m.isDeleted);
 
-    res.json({ members: finalMembers });
+    // Stats summary
+    const stats = {
+      total: uniqueMembers.length,
+      activeToday: uniqueMembers.filter(m => m.status === 'activeToday').length,
+      activeWeek: uniqueMembers.filter(m => m.status === 'activeWeek').length,
+      inactive: uniqueMembers.filter(m => m.status === 'inactive').length,
+      bots: uniqueMembers.filter(m => m.isBot).length,
+      deleted: uniqueMembers.filter(m => m.isDeleted).length,
+      unknown: uniqueMembers.filter(m => m.status === 'unknown').length,
+    };
+
+    res.json({ members: finalMembers, stats });
   } catch (error) {
     res.status(500).json({ error: getErrorMessage(error) });
   }

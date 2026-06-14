@@ -15,7 +15,8 @@ axios.interceptors.request.use(config => {
 
 type Step = 'PHONE' | 'CODE' | 'DASHBOARD' | 'SAVE_SESSION';
 type Group = { id: string; title: string };
-type Member = { id: string; username?: string; firstName?: string };
+type Member = { id: string; username?: string; firstName?: string; status?: string; isBot?: boolean; isDeleted?: boolean };
+type MemberStats = { total: number; activeToday: number; activeWeek: number; inactive: number; bots: number; deleted: number; unknown: number; };
 type CampaignStatus = {
   id?: number;
   status?: string;
@@ -61,6 +62,9 @@ function App() {
   const [isRunning, setIsRunning] = useState(false);
 
   const [isGroupsLoading, setIsGroupsLoading] = useState(false);
+  const [memberStats, setMemberStats] = useState<MemberStats | null>(null);
+  const [activeFilter, setActiveFilter] = useState<'all' | 'activeToday' | 'activeWeek' | 'active'>('all');
+  const [allExtractedMembers, setAllExtractedMembers] = useState<Member[]>([]);
 
   const fetchGroups = useCallback(async () => {
     setIsGroupsLoading(true);
@@ -253,12 +257,23 @@ function App() {
 
     try {
       setMembers([]);
-      const res = await axios.post<{ members: Member[] }>(`${API_URL}/telegram/members`, { groupIds: selectedGroups });
+      setMemberStats(null);
+      setAllExtractedMembers([]);
+      const res = await axios.post<{ members: Member[]; stats: MemberStats }>(`${API_URL}/telegram/members`, { groupIds: selectedGroups });
+      setAllExtractedMembers(res.data.members);
+      setMemberStats(res.data.stats);
       setMembers(res.data.members);
-      alert(`Extracted ${res.data.members.length} unique members from ${selectedGroups.length} groups`);
+      setActiveFilter('all');
     } catch (error) {
       alert(`Failed to extract members: ${getErrorMessage(error, 'Something went wrong')}`);
     }
+  };
+
+  const applyFilter = (filter: 'all' | 'activeToday' | 'activeWeek' | 'active') => {
+    setActiveFilter(filter);
+    if (filter === 'all') setMembers(allExtractedMembers);
+    else if (filter === 'active') setMembers(allExtractedMembers.filter(m => m.status === 'activeToday' || m.status === 'activeWeek'));
+    else setMembers(allExtractedMembers.filter(m => m.status === filter));
   };
 
   const toggleGroup = (id: string) => {
@@ -561,9 +576,31 @@ return (
             <button onClick={extractMembers} disabled={isGroupsLoading} className="w-full shrink-0 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 p-3 rounded text-gray-800 font-semibold transition-colors">
               Extract Members
             </button>
-            {members.length > 0 && (
+            {memberStats && (
               <div className="mt-3">
-                <p className="text-green-400 font-semibold text-center mb-2">Ready: {members.length} Users</p>
+                <div className="grid grid-cols-3 gap-1 mb-3 text-center text-xs">
+                  <div className="bg-green-50 border border-green-200 p-2 rounded-lg">
+                    <p className="text-lg font-bold text-green-600">{memberStats.activeToday}</p>
+                    <p className="text-green-700">🟢 Active Today</p>
+                  </div>
+                  <div className="bg-yellow-50 border border-yellow-200 p-2 rounded-lg">
+                    <p className="text-lg font-bold text-yellow-600">{memberStats.activeWeek}</p>
+                    <p className="text-yellow-700">🟡 This Week</p>
+                  </div>
+                  <div className="bg-gray-50 border border-gray-200 p-2 rounded-lg">
+                    <p className="text-lg font-bold text-gray-500">{memberStats.inactive + memberStats.unknown}</p>
+                    <p className="text-gray-500">🔴 Inactive</p>
+                  </div>
+                </div>
+                <div className="flex gap-1 mb-2 flex-wrap">
+                  {(['all','active','activeToday','activeWeek'] as const).map(f => (
+                    <button key={f} onClick={() => applyFilter(f)}
+                      className={`text-xs px-2 py-1 rounded font-semibold transition-colors ${activeFilter === f ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                      {f === 'all' ? `All (${allExtractedMembers.length})` : f === 'active' ? `✅ Active Only (${memberStats.activeToday + memberStats.activeWeek})` : f === 'activeToday' ? `🟢 Today (${memberStats.activeToday})` : `🟡 Week (${memberStats.activeWeek})`}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-blue-600 font-semibold text-center mb-2">✅ Ready: {members.length} Users</p>
                 <label className="flex items-center gap-2 cursor-pointer mb-2">
                   <input
                     type="checkbox"
