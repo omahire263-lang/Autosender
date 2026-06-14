@@ -58,7 +58,7 @@ function App() {
   const [manualDelay, setManualDelay] = useState<string | number>(60);
   const [useManualDelay, setUseManualDelay] = useState(false);
   const [skipCount, setSkipCount] = useState<string | number>(0);
-  const [activeCampaigns, setActiveCampaigns] = useState<CampaignStatus[]>([]);
+  const [campaignStatus, setCampaignStatus] = useState<CampaignStatus | null>(null);
   const [history, setHistory] = useState<CampaignStatus[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [historyPage, setHistoryPage] = useState(1);
@@ -90,16 +90,10 @@ function App() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await axios.get<{ status: CampaignStatus | null; activeCampaigns: CampaignStatus[] }>(`${API_URL}/campaign/status`);
-      const { status, activeCampaigns } = res.data;
-      setActiveCampaigns(activeCampaigns || []);
-      if (status) {
-        
-        setIsRunning(true);
-      } else {
-        
-        setIsRunning(false);
-      }
+      const res = await axios.get<{ status: CampaignStatus | null; isRunning: boolean }>(`${API_URL}/campaign/status`);
+      const { status, isRunning } = res.data;
+      setCampaignStatus(status || null);
+      setIsRunning(isRunning);
     } catch (error) {
       console.error(error);
     }
@@ -734,25 +728,23 @@ return (
 
            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm md:col-span-2 flex flex-col md:flex-row items-center justify-between gap-6">
               <div className="text-center md:text-left">
-                <h2 className="text-2xl font-bold mb-2 text-gray-900">Active Campaigns</h2>
-                {activeCampaigns.length > 0 ? (
+                <h2 className="text-2xl font-bold mb-2 text-gray-900">Campaign Status</h2>
+                {campaignStatus ? (
                   <div>
-                    <p className="text-green-600 font-bold mb-2">{activeCampaigns.length} Campaign(s) Running</p>
-                    {activeCampaigns.map((c, i) => (
-                      <div key={c.id || i} className="text-sm bg-gray-50 p-2 rounded border border-gray-200 mb-2">
-                         <p className="font-semibold truncate w-48 sm:w-64">{c.message}</p>
-                         <p className="text-gray-600">Sent: {c.sentCount || 0} / {c.totalUsers || 0} | Status: <span className="text-green-500 font-semibold">{c.status}</span></p>
-                      </div>
-                    ))}
+                    <p className="text-green-600 font-bold mb-2">Campaign Running</p>
+                    <div className="text-sm bg-gray-50 p-2 rounded border border-gray-200 mb-2">
+                       <p className="font-semibold truncate w-48 sm:w-64">{campaignStatus.message}</p>
+                       <p className="text-gray-600">Sent: {campaignStatus.sentCount || 0} / {campaignStatus.totalUsers || 0} | Status: <span className="text-green-500 font-semibold">{campaignStatus.status}</span></p>
+                    </div>
                   </div>
                 ) : <p className="text-gray-500">No active campaigns</p>}
               </div>
 
               <div className="flex flex-col gap-4 w-full md:w-auto">
                 <button onClick={startCampaign} className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white hover:bg-blue-700 px-8 py-3 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-[0_4px_14px_0_rgba(37,99,235,0.39)]">
-                  <Play fill="currentColor" /> {activeCampaigns.length > 0 ? 'Start Another' : 'Start Sender'}
+                  <Play fill="currentColor" /> Start Sender
                 </button>
-                {activeCampaigns.length > 0 && (
+                {campaignStatus && isRunning && (
                   <div className="flex gap-2">
                     <button onClick={stopCampaign} className="w-full flex items-center justify-center gap-2 bg-red-500 text-white hover:bg-red-600 px-6 py-3 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-[0_4px_14px_0_rgba(239,68,68,0.39)]">
                       <Square fill="currentColor" /> Pause

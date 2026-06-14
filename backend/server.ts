@@ -36,7 +36,7 @@ app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'ok', 
     clientConnected: !!client,
-    campaignRunning: activeCampaigns.size > 0,
+    campaignRunning: isCampaignRunning,
     timestamp: new Date().toISOString()
   });
 });
@@ -415,11 +415,16 @@ interface CampaignState {
   baseDelay: number;
   isRunning: boolean;
 }
-const activeCampaigns = new Map<string, CampaignState>();
+let currentCampaign: CampaignState | null = null;
+let isCampaignRunning = false;
 
 app.post('/api/campaign/start', async (req, res) => {
   const activeClient = await getActiveClient(res);
   if (!activeClient) return;
+
+  if (isCampaignRunning) {
+    return res.status(400).json({ error: 'A campaign is already running' });
+  }
 
   const messageText = typeof req.body.message === 'string' ? req.body.message.trim() : '';
   const rawUsers: unknown[] = Array.isArray(req.body.users) ? req.body.users : [];
@@ -461,7 +466,7 @@ app.post('/api/campaign/start', async (req, res) => {
       failedCount: 0
     });
 
-    const campaignState: CampaignState = {
+    currentCampaign = {
       dbId: campaignRef.id,
       message: messageText,
       users: usersToSend,
@@ -471,23 +476,24 @@ app.post('/api/campaign/start', async (req, res) => {
       isRunning: true
     };
     
-    activeCampaigns.set(campaignRef.id, campaignState);
+    isCampaignRunning = true;
     res.json({ success: true, campaignId: campaignRef.id });
-    runCampaign(campaignRef.id);
+    runCampaign();
   } catch (error) {
     res.status(500).json({ error: getErrorMessage(error) });
   }
 });
 
 app.post('/api/campaign/pause-all', async (req, res) => {
-  const db = getDb();
-  for (const [id, campaign] of activeCampaigns.entries()) {
-    campaign.isRunning = false;
-    await db.collection('campaigns').doc(id).update({ status: 'Paused' }).catch(() => {});
+  isCampaignRunning = false;
+  if (currentCampaign) {
+    currentCampaign.isRunning = false;
+    const db = getDb();
+    await db.collection('campaigns').doc(currentCampaign.dbId).update({ status: 'Paused' }).catch(() => {});
   }
-  activeCampaigns.clear();
+  currentCampaign = null;
 
-  // Also pause any stray "Sending" campaigns in DB
+  const db = getDb();
   const snap = await db.collection('campaigns').where('status', '==', 'Sending').get();
   for (const doc of snap.docs) {
     await db.collection('campaigns').doc(doc.id).update({ status: 'Paused' }).catch(() => {});
@@ -496,14 +502,22 @@ app.post('/api/campaign/pause-all', async (req, res) => {
   res.json({ success: true });
 });
 
-app.post('/api/campaign/stop-all', async (req, res) => {
-  const db = getDb();
-  for (const [id, campaign] of activeCampaigns.entries()) {
-    campaign.isRunning = false;
-    await db.collection('campaigns').doc(id).update({ status: 'Stopped' }).catch(() => {});
-  }
-  activeCampaigns.clear();
+app.post('/api/campaign/resume', async (req, res) => {
+  if (isCampaignRunning) return res.json({ success: true });
+  await resumeCampaigns();
+  res.json({ success: true });
+});
 
+app.post('/api/campaign/stop-all', async (req, res) => {
+  isCampaignRunning = false;
+  if (currentCampaign) {
+    currentCampaign.isRunning = false;
+    const db = getDb();
+    await db.collection('campaigns').doc(currentCampaign.dbId).update({ status: 'Stopped' }).catch(() => {});
+  }
+  currentCampaign = null;
+
+  const db = getDb();
   const snap = await db.collection('campaigns').where('status', '==', 'Sending').get();
   for (const doc of snap.docs) {
     await db.collection('campaigns').doc(doc.id).update({ status: 'Stopped' }).catch(() => {});
@@ -542,12 +556,10 @@ app.post('/api/campaign/update-delay', async (req, res) => {
     return res.status(400).json({ error: 'Valid delay in seconds is required' });
   }
 
-  if (activeCampaigns.size > 0) {
+  if (currentCampaign) {
+    currentCampaign.baseDelay = delaySeconds;
     const db = getDb();
-    for (const [id, campaign] of activeCampaigns.entries()) {
-      campaign.baseDelay = delaySeconds;
-      await db.collection('campaigns').doc(id).update({ baseDelay: delaySeconds }).catch(() => {});
-    }
+    await db.collection('campaigns').doc(currentCampaign.dbId).update({ baseDelay: delaySeconds }).catch(() => {});
   }
 
   res.json({ success: true });
@@ -560,12 +572,10 @@ app.post('/api/campaign/update-message', async (req, res) => {
     return res.status(400).json({ error: 'Message is required' });
   }
 
-  if (activeCampaigns.size > 0) {
+  if (currentCampaign) {
+    currentCampaign.message = messageText;
     const db = getDb();
-    for (const [id, campaign] of activeCampaigns.entries()) {
-      campaign.message = messageText;
-      await db.collection('campaigns').doc(id).update({ message: messageText }).catch(() => {});
-    }
+    await db.collection('campaigns').doc(currentCampaign.dbId).update({ message: messageText }).catch(() => {});
   }
 
   res.json({ success: true });
@@ -575,7 +585,7 @@ app.get('/api/campaign/status', async (req, res) => {
   const db = getDb();
   const snap = await db.collection('campaigns').where('status', '==', 'Sending').get();
   const active = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-  res.json({ status: active.length > 0 ? active[0] : null, activeCount: active.length, activeCampaigns: active });
+  res.json({ status: active.length > 0 ? active[0] : null, isRunning: isCampaignRunning });
 });
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
@@ -634,16 +644,14 @@ function antiBanSpin(text: string): string {
   return finalMsg;
 }
 
-async function runCampaign(campaignId: string) {
+async function runCampaign() {
   const activeClient = client;
-  if (!activeClient) return;
+  if (!activeClient || !currentCampaign) return;
 
-  const campaign = activeCampaigns.get(campaignId);
-  if (!campaign) return;
-
+  const campaign = currentCampaign;
   const db = getDb();
 
-  while (campaign.isRunning && campaign.users.length > 0) {
+  while (isCampaignRunning && campaign.isRunning && campaign.users.length > 0) {
     const userId = campaign.users.shift();
     if (!userId) continue;
 
@@ -668,7 +676,7 @@ async function runCampaign(campaignId: string) {
       };
       if (campaign.users.length === 0) {
         updateData.status = 'Completed';
-      } else if (campaign.isRunning) {
+      } else if (isCampaignRunning && campaign.isRunning) {
         updateData.status = 'Sending';
       }
       await db.collection('campaigns').doc(campaign.dbId).update(updateData);
@@ -678,7 +686,8 @@ async function runCampaign(campaignId: string) {
 
     if (campaign.users.length === 0) {
       campaign.isRunning = false;
-      activeCampaigns.delete(campaignId);
+      isCampaignRunning = false;
+      currentCampaign = null;
       break;
     }
 
@@ -690,30 +699,32 @@ async function runCampaign(campaignId: string) {
 }
 
 async function resumeCampaigns() {
+  if (isCampaignRunning) return;
   const db = getDb();
-  const cSnap = await db.collection('campaigns').where('status', '==', 'Sending').get();
-  for (const doc of cSnap.docs) {
-    const activeDbCampaign = { id: doc.id, ...(doc.data()) } as any;
-    if (activeDbCampaign.remainingUsers) {
-      try {
-        const remaining = JSON.parse(activeDbCampaign.remainingUsers);
-        if (remaining.length > 0) {
-            const campaignState: CampaignState = {
-                dbId: activeDbCampaign.id,
-                message: activeDbCampaign.message,
-                users: remaining,
-                sent: activeDbCampaign.sentCount || 0,
-                failed: activeDbCampaign.failedCount || 0,
-                baseDelay: activeDbCampaign.baseDelay || ((activeDbCampaign.estimatedTime || 3600) / (activeDbCampaign.totalUsers || 1)),
-                isRunning: true
-            };
-            activeCampaigns.set(campaignState.dbId, campaignState);
-            console.log('Resuming campaign from DB', campaignState.dbId);
-            runCampaign(campaignState.dbId);
-        }
-      } catch (e) {
-        console.error('Failed to resume campaign', e);
+  const cSnap = await db.collection('campaigns').where('status', '==', 'Sending').limit(1).get();
+  if (cSnap.empty) return;
+  
+  const doc = cSnap.docs[0];
+  const activeDbCampaign = { id: doc.id, ...(doc.data()) } as any;
+  if (activeDbCampaign.remainingUsers) {
+    try {
+      const remaining = JSON.parse(activeDbCampaign.remainingUsers);
+      if (remaining.length > 0) {
+          currentCampaign = {
+              dbId: activeDbCampaign.id,
+              message: activeDbCampaign.message,
+              users: remaining,
+              sent: activeDbCampaign.sentCount || 0,
+              failed: activeDbCampaign.failedCount || 0,
+              baseDelay: activeDbCampaign.baseDelay || ((activeDbCampaign.estimatedTime || 3600) / (activeDbCampaign.totalUsers || 1)),
+              isRunning: true
+          };
+          isCampaignRunning = true;
+          console.log('Resuming campaign from DB', currentCampaign.dbId);
+          runCampaign();
       }
+    } catch (e) {
+      console.error('Failed to resume campaign', e);
     }
   }
 }
