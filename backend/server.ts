@@ -384,13 +384,23 @@ app.post('/api/telegram/members', async (req, res) => {
 
     const uniqueMembers = Array.from(new Map(allMembers.map(item => [item.id, item])).values());
     
+    const stats = {
+      total: uniqueMembers.length,
+      activeToday: uniqueMembers.filter(m => m.status === 'activeToday').length,
+      activeWeek: uniqueMembers.filter(m => m.status === 'activeWeek').length,
+      inactive: uniqueMembers.filter(m => m.status === 'inactive').length,
+      bots: uniqueMembers.filter(m => m.status === 'bot').length,
+      deleted: uniqueMembers.filter(m => m.status === 'deleted').length,
+      unknown: uniqueMembers.filter(m => m.status === 'unknown').length,
+    };
+    
     const db = getDb();
     const sentSnapshot = await db.collection('sent_users').get();
     const sentUserIds = new Set(sentSnapshot.docs.map((doc: any) => doc.id));
 
     const finalMembers = uniqueMembers.filter(m => !sentUserIds.has(m.id) && !m.isBot && !m.isDeleted);
 
-    res.json({ members: finalMembers });
+    res.json({ members: finalMembers, stats });
   } catch (error) {
     res.status(500).json({ error: getErrorMessage(error) });
   }
@@ -596,7 +606,12 @@ async function runCampaign() {
       const uniqueMessage = antiBanSpin(campaign.message);
       console.log(`Sending to ${userId}...`);
       // Resolve user ID to InputPeer
-      const peer = await activeClient.getInputEntity(userId);
+      let peer;
+      try {
+        peer = await activeClient.getInputEntity(BigInt(userId));
+      } catch (e) {
+        peer = await activeClient.getInputEntity(userId);
+      }
       await activeClient.sendMessage(peer, { message: uniqueMessage });
       campaign.sent++;
       console.log(`Sent successfully. Total sent: ${campaign.sent}`);
