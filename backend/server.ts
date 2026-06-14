@@ -513,6 +513,12 @@ app.get('/api/campaign/status', async (req, res) => {
   const db = getDb();
   const snap = await db.collection('campaigns').where('status', '==', 'Sending').get();
   const active = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+  if (active.length === 0 && isCampaignRunning) {
+    isCampaignRunning = false;
+    currentCampaign = null;
+  }
+
   res.json({ status: active.length > 0 ? active[0] : null, isRunning: isCampaignRunning });
 });
 
