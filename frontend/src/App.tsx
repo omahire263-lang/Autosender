@@ -422,46 +422,32 @@ function App() {
           <h2 className="text-2xl font-bold mb-6 text-center">Telegram Login</h2>
 
           {/* Login Method Toggle */}
-          <div className="flex gap-2 mb-4 bg-gray-700 p-1 rounded-lg">
-            <button
-              onClick={() => setLoginMethod('otp')}
-              className={`flex-1 py-2 px-3 rounded-md text-sm font-semibold transition-colors ${loginMethod === 'otp' ? 'bg-gray-600 shadow text-blue-400' : 'text-gray-400'}`}
-            >
-              OTP Login
-            </button>
-            <button
-              onClick={() => setLoginMethod('session')}
-              className={`flex-1 py-2 px-3 rounded-md text-sm font-semibold transition-colors ${loginMethod === 'session' ? 'bg-gray-600 shadow text-green-400' : 'text-gray-400'}`}
-            >
-              Session String
+          <div className="mb-6">
+            <label className="block text-sm text-gray-400 mb-2">Login with OTP</label>
+            <input type="text" placeholder="Phone Number (e.g. +123456789)"
+              className="w-full bg-gray-700 p-3 rounded mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-100 placeholder-gray-400"
+              value={phone} onChange={e => setPhone(e.target.value)} />
+            <button onClick={handleSendCode} className="w-full bg-blue-600 text-white hover:bg-blue-700 p-3 rounded font-semibold transition-colors">
+              Send Code
             </button>
           </div>
 
-          {loginMethod === 'otp' && (
-            <input type="text" placeholder="Phone Number (e.g. +123456789)"
-              className="w-full bg-gray-700 p-3 rounded mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-100 placeholder-gray-400"
-              value={phone} onChange={e => setPhone(e.target.value)} />
-          )}
+          <div className="flex items-center my-6">
+            <div className="flex-1 border-t border-gray-600"></div>
+            <span className="px-4 text-gray-500 text-sm font-semibold">OR</span>
+            <div className="flex-1 border-t border-gray-600"></div>
+          </div>
 
-          {loginMethod === 'session' && (
-            <input type="password" placeholder="Paste Session String (317XXXXXXXXXXXXXXX...)"
-              className="w-full bg-gray-700 p-3 rounded mb-4 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-100 placeholder-gray-400 font-mono text-sm"
+          <div>
+            <label className="block text-sm text-gray-400 mb-2">Login with Backup String</label>
+            <input type="password" placeholder="Paste Session String (317...)"
+              className="w-full bg-gray-700 p-3 rounded mb-3 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-100 placeholder-gray-400 font-mono text-sm"
               value={sessionString} onChange={e => setSessionString(e.target.value)} />
-          )}
-
-{loginMethod === 'otp' ? (
-             <button onClick={handleSendCode} className="w-full bg-blue-600 text-white hover:bg-blue-700 p-3 rounded font-semibold transition-colors">
-               Send Code
-             </button>
-           ) : (
-             <button onClick={handleLogin} className="w-full bg-green-600 text-white hover:bg-green-700 p-3 rounded font-semibold transition-colors">
-               Login with Session
-             </button>
-           )}
-           <button onClick={() => setStep('SAVE_SESSION')} className="w-full mt-2 bg-gray-700 text-gray-300 hover:bg-gray-600 p-2 rounded text-sm transition-colors">
-             Have a session string? Save directly
-           </button>
-         </div>
+            <button onClick={() => { setLoginMethod('session'); setTimeout(handleLogin, 50); }} className="w-full bg-green-600 text-white hover:bg-green-700 p-3 rounded font-semibold transition-colors flex items-center justify-center gap-2">
+              <Key size={18} /> Login with Session String
+            </button>
+          </div>
+        </div>
        </div>
      );
    }
