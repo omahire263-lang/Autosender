@@ -37,16 +37,14 @@ const getErrorMessage = (error: unknown, fallback: string) => {
 };
 
 function App() {
-  const [platform, setPlatform] = useState<'NONE' | 'TELEGRAM' | 'WHATSAPP'>('NONE');
+  const [step, setStep] = useState<Step>('PHONE');
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [sessionString, setSessionString] = useState('');
-  const [step, setStep] = useState<Step>('PHONE');
   const [isLoading, setIsLoading] = useState(true);
   const [dashboardUser, setDashboardUser] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loginMethod, setLoginMethod] = useState<'otp' | 'session'>('otp');
-  const [loggedInSessionString, setLoggedInSessionString] = useState('');
 
   const [groups, setGroups] = useState<Group[]>([]);
   const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
@@ -59,20 +57,9 @@ function App() {
   const [useManualDelay, setUseManualDelay] = useState(false);
   const [skipCount, setSkipCount] = useState<string | number>(0);
   const [campaignStatus, setCampaignStatus] = useState<CampaignStatus | null>(null);
-  const [history, setHistory] = useState<CampaignStatus[]>([]);
   const [isRunning, setIsRunning] = useState(false);
-  const [historyPage, setHistoryPage] = useState(1);
-  const itemsPerPage = 15;
-
-  const paginatedHistory = useMemo(() => {
-    const start = (historyPage - 1) * itemsPerPage;
-    return history.slice(start, start + itemsPerPage);
-  }, [history, historyPage]);
-  const totalPages = Math.ceil(history.length / itemsPerPage) || 1;
 
   const [isGroupsLoading, setIsGroupsLoading] = useState(false);
-  const [memberStats, setMemberStats] = useState<MemberStats | null>(null);
-  const [activeFilter, setActiveFilter] = useState<'all' | 'activeToday' | 'activeWeek' | 'active'>('all');
   const [allExtractedMembers, setAllExtractedMembers] = useState<Member[]>([]);
 
   const fetchGroups = useCallback(async () => {
@@ -99,18 +86,9 @@ function App() {
     }
   }, []);
 
-  const fetchHistory = useCallback(async () => {
-    try {
-      const res = await axios.get<{ history: CampaignStatus[] }>(`${API_URL}/campaign/history`);
-      setHistory(res.data.history || []);
-    } catch (error) {
-      console.error(error);
-    }
-  }, []);
-
   useEffect(() => {
-    if (step === 'DASHBOARD') fetchHistory();
-  }, [step, fetchHistory]);
+    if (step === 'DASHBOARD') fetchStatus();
+  }, [step, fetchStatus]);
 
   const initSession = useCallback(async () => {
     setIsLoading(true);
@@ -273,23 +251,13 @@ function App() {
 
     try {
       setMembers([]);
-      setMemberStats(null);
-      setAllExtractedMembers([]);
-      const res = await axios.post<{ members: Member[]; stats: MemberStats }>(`${API_URL}/telegram/members`, { groupIds: selectedGroups });
+      const res = await axios.post<{ members: Member[] }>(`${API_URL}/telegram/members`, { groupIds: selectedGroups });
       setAllExtractedMembers(res.data.members);
-      setMemberStats(res.data.stats);
       setMembers(res.data.members);
-      setActiveFilter('all');
+      // Auto-filter to only active users (sent to no one yet)
     } catch (error) {
       alert(`Failed to extract members: ${getErrorMessage(error, 'Something went wrong')}`);
     }
-  };
-
-  const applyFilter = (filter: 'all' | 'activeToday' | 'activeWeek' | 'active') => {
-    setActiveFilter(filter);
-    if (filter === 'all') setMembers(allExtractedMembers);
-    else if (filter === 'active') setMembers(allExtractedMembers.filter(m => m.status === 'activeToday' || m.status === 'activeWeek'));
-    else setMembers(allExtractedMembers.filter(m => m.status === filter));
   };
 
   const toggleGroup = (id: string) => {
@@ -324,12 +292,11 @@ function App() {
     }
   };
 
-  const stopCampaign = async () => {
+const stopCampaign = async () => {
     try {
       await axios.post(`${API_URL}/campaign/pause-all`);
       setIsRunning(false);
       await fetchStatus();
-      await fetchHistory();
     } catch (error) {
       console.error(error);
     }
@@ -340,32 +307,23 @@ function App() {
       await axios.post(`${API_URL}/campaign/stop-all`);
       setIsRunning(false);
       await fetchStatus();
-      await fetchHistory();
     } catch (error) {
       console.error(error);
     }
   };
 
-
+  const closeAllCampaigns = async () => {
+    try {
+      await axios.post(`${API_URL}/campaign/stop-all`);
+      setIsRunning(false);
+await fetchStatus();
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
   const updateMessage = async () => {
-    try {
-      await axios.post(`${API_URL}/campaign/update-message`, { message });
-      alert('Message updated live!');
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
-  const updateDelay = async () => {
-    const delaySeconds = Number(manualDelay);
-    if (!delaySeconds || delaySeconds <= 0) return alert('Enter a valid delay in seconds');
-    try {
-      await axios.post(`${API_URL}/campaign/update-delay`, { delaySeconds });
-      alert(`Delay updated to ${delaySeconds} seconds!`);
-    } catch (error) {
-      alert(`Failed to update delay: ${getErrorMessage(error, 'Something went wrong')}`);
-    }
+    alert('Message auto-saves when you start campaign');
   };
 
   const handleLogout = async () => {

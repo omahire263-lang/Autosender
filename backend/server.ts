@@ -390,18 +390,7 @@ app.post('/api/telegram/members', async (req, res) => {
 
     const finalMembers = uniqueMembers.filter(m => !sentUserIds.has(m.id) && !m.isBot && !m.isDeleted);
 
-    // Stats summary
-    const stats = {
-      total: uniqueMembers.length,
-      activeToday: uniqueMembers.filter(m => m.status === 'activeToday').length,
-      activeWeek: uniqueMembers.filter(m => m.status === 'activeWeek').length,
-      inactive: uniqueMembers.filter(m => m.status === 'inactive').length,
-      bots: uniqueMembers.filter(m => m.isBot).length,
-      deleted: uniqueMembers.filter(m => m.isDeleted).length,
-      unknown: uniqueMembers.filter(m => m.status === 'unknown').length,
-    };
-
-    res.json({ members: finalMembers, stats });
+    res.json({ members: finalMembers });
   } catch (error) {
     res.status(500).json({ error: getErrorMessage(error) });
   }
@@ -515,61 +504,6 @@ app.post('/api/campaign/stop-all', async (req, res) => {
   const snap = await db.collection('campaigns').where('status', '==', 'Sending').get();
   for (const doc of snap.docs) {
     await db.collection('campaigns').doc(doc.id).update({ status: 'Stopped' }).catch(() => {});
-  }
-
-  res.json({ success: true });
-});
-
-app.get('/api/campaign/history', async (req, res) => {
-  try {
-    const db = getDb();
-    
-    // Auto-delete 30 days old campaigns
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const oldSnap = await db.collection('campaigns').where('createdAt', '<', thirtyDaysAgo).get();
-    for (const doc of oldSnap.docs) {
-      await db.collection('campaigns').doc(doc.id).delete().catch(() => {});
-    }
-
-    const snap = await db.collection('campaigns').orderBy('createdAt', 'desc').limit(100).get();
-    const history = snap.docs.map(doc => {
-      const data = doc.data();
-      return { id: doc.id, ...data, createdAt: data.createdAt?.toDate?.()?.toISOString() || null };
-    });
-    res.json({ history });
-  } catch (error) {
-    res.status(500).json({ error: getErrorMessage(error) });
-  }
-});
-
-app.post('/api/campaign/update-delay', async (req, res) => {
-  const delaySeconds = Number(req.body.delaySeconds);
-
-  if (!Number.isFinite(delaySeconds) || delaySeconds <= 0) {
-    return res.status(400).json({ error: 'Valid delay in seconds is required' });
-  }
-
-  if (currentCampaign) {
-    currentCampaign.baseDelay = delaySeconds;
-    const db = getDb();
-    await db.collection('campaigns').doc(currentCampaign.dbId).update({ baseDelay: delaySeconds }).catch(() => {});
-  }
-
-  res.json({ success: true });
-});
-
-app.post('/api/campaign/update-message', async (req, res) => {
-  const messageText = typeof req.body.message === 'string' ? req.body.message.trim() : '';
-
-  if (!messageText) {
-    return res.status(400).json({ error: 'Message is required' });
-  }
-
-  if (currentCampaign) {
-    currentCampaign.message = messageText;
-    const db = getDb();
-    await db.collection('campaigns').doc(currentCampaign.dbId).update({ message: messageText }).catch(() => {});
   }
 
   res.json({ success: true });
