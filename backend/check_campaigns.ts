@@ -24,7 +24,7 @@ async function main() {
   
   for (const doc of snap.docs) {
     const data = doc.data();
-    console.log(`Campaign ${doc.id} - Status: ${data.status}, Sent: ${data.sentCount}, Failed: ${data.failedCount}, Total: ${data.totalUsers}`);
+    console.log(`Campaign ${doc.id} - Status: ${data.status}, Sent: ${data.sentCount}, Failed: ${data.failedCount}, Total: ${data.totalUsers}, Error: ${data.lastError}`);
   }
   
   process.exit(0);

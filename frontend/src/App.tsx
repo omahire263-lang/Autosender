@@ -754,11 +754,6 @@ return (
                     </button>
                   </div>
                 )}
-                {!isRunning && history.some(h => h.status === 'Paused') && (
-                  <button onClick={resumeCampaign} className="w-full flex items-center justify-center gap-2 bg-green-600 text-white hover:bg-green-700 px-8 py-3 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-[0_4px_14px_0_rgba(34,197,94,0.39)]">
-                    <Play fill="currentColor" /> Resume Last Paused
-                  </button>
-                )}
               </div>
             </div>
 
