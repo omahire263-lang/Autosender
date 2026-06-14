@@ -37,6 +37,7 @@ app.get('/api/health', (req, res) => {
     status: 'ok', 
     clientConnected: !!client,
     campaignRunning: isCampaignRunning,
+    sessionToken: activeSessionToken ? 'present' : 'none',
     timestamp: new Date().toISOString()
   });
 });
@@ -646,7 +647,10 @@ function antiBanSpin(text: string): string {
 
 async function runCampaign() {
   const activeClient = client;
-  if (!activeClient || !currentCampaign) return;
+  if (!activeClient || !currentCampaign) {
+    console.log('runCampaign: No client or campaign', { hasClient: !!activeClient, hasCampaign: !!currentCampaign });
+    return;
+  }
 
   const campaign = currentCampaign;
   const db = getDb();
@@ -657,14 +661,16 @@ async function runCampaign() {
 
     try {
       const uniqueMessage = antiBanSpin(campaign.message);
+      console.log(`Sending to ${userId}...`);
       await activeClient.sendMessage(userId, { message: uniqueMessage });
       campaign.sent++;
+      console.log(`Sent successfully. Total sent: ${campaign.sent}`);
       await db.collection('sent_users').doc(userId).set({ 
         userId, 
         sentAt: FieldValue.serverTimestamp() 
       }, { merge: true });
-    } catch (error) {
-      console.error('Failed to send to', userId, error);
+    } catch (error: any) {
+      console.error('Failed to send to', userId, error?.message || error);
       campaign.failed++;
     }
 
