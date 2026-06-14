@@ -26,6 +26,7 @@ type CampaignStatus = {
   message?: string;
   estimatedTime?: number;
   createdAt?: string;
+  lastError?: string;
 };
 
 const getErrorMessage = (error: unknown, fallback: string) => {
@@ -727,7 +728,12 @@ return (
                     <p className="text-green-600 font-bold mb-2">Campaign Running</p>
                     <div className="text-sm bg-gray-50 p-2 rounded border border-gray-200 mb-2">
                        <p className="font-semibold truncate w-48 sm:w-64">{campaignStatus.message}</p>
-                       <p className="text-gray-600">Sent: {campaignStatus.sentCount || 0} / {campaignStatus.totalUsers || 0} | Status: <span className="text-green-500 font-semibold">{campaignStatus.status}</span></p>
+                       <p className="text-gray-600">Sent: {campaignStatus.sentCount || 0} / {campaignStatus.totalUsers || 0} | Failed: <span className="text-red-500 font-bold">{campaignStatus.failedCount || 0}</span></p>
+                       {campaignStatus.lastError && (
+                         <div className="mt-2 bg-red-100 border border-red-300 p-2 rounded text-xs text-red-700">
+                           <span className="font-bold">Error:</span> {campaignStatus.lastError}
+                         </div>
+                       )}
                     </div>
                   </div>
                 ) : <p className="text-gray-500">No active campaigns</p>}

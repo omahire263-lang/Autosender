@@ -532,6 +532,28 @@ app.get('/api/campaign/status', async (req, res) => {
   res.json({ status: active.length > 0 ? active[0] : null, isRunning: isCampaignRunning });
 });
 
+app.post('/api/campaign/update-message', async (req, res) => {
+  if (currentCampaign) {
+    currentCampaign.message = req.body.message || currentCampaign.message;
+    try {
+      const db = getDb();
+      await db.collection('campaigns').doc(currentCampaign.dbId).update({ message: currentCampaign.message });
+    } catch(e) {}
+  }
+  res.json({ success: true });
+});
+
+app.post('/api/campaign/update-delay', async (req, res) => {
+  if (currentCampaign) {
+    currentCampaign.baseDelay = Number(req.body.delaySeconds) || currentCampaign.baseDelay;
+    try {
+      const db = getDb();
+      await db.collection('campaigns').doc(currentCampaign.dbId).update({ baseDelay: currentCampaign.baseDelay });
+    } catch(e) {}
+  }
+  res.json({ success: true });
+});
+
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 function antiBanSpin(text: string): string {
