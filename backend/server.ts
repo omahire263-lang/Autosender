@@ -624,27 +624,46 @@ async function runCampaign() {
     const userId = campaign.users.shift();
     if (!userId) continue;
 
-    try {
-      const uniqueMessage = antiBanSpin(campaign.message);
-      console.log(`Sending to ${userId}...`);
-      // Resolve user ID to InputPeer
-      let peer;
+    let attempts = 0;
+    let sent = false;
+    
+    while (attempts < 3 && !sent) {
       try {
-        peer = await activeClient.getInputEntity(BigInt(userId) as any);
-      } catch (e) {
-        peer = await activeClient.getInputEntity(userId);
+        const uniqueMessage = antiBanSpin(campaign.message);
+        console.log(`Sending to ${userId} (attempt ${attempts + 1})...`);
+        
+        // Resolve user ID to InputPeer
+        let peer;
+        try {
+          peer = await activeClient.getInputEntity(BigInt(userId) as any);
+        } catch (e) {
+          peer = await activeClient.getInputEntity(userId);
+        }
+        await activeClient.sendMessage(peer, { message: uniqueMessage });
+        sent = true;
+        campaign.sent++;
+        console.log(`Sent successfully. Total sent: ${campaign.sent}`);
+        await db.collection('sent_users').doc(userId).set({ 
+          userId, 
+          sentAt: FieldValue.serverTimestamp() 
+        }, { merge: true });
+      } catch (error: any) {
+        const errMsg = error?.message || String(error);
+        console.error('Failed to send to', userId, errMsg);
+        
+        // Check for FLOOD_WAIT error
+        const floodMatch = errMsg.match(/FLOOD_WAIT[_ ]*(\d+)/i);
+        if (floodMatch && attempts < 2) {
+          const waitSeconds = parseInt(floodMatch[1]);
+          console.log(`FLOOD_WAIT detected, waiting ${waitSeconds + 5} seconds...`);
+          await sleep((waitSeconds + 5) * 1000);
+          attempts++;
+          continue;
+        }
+        
+        campaign.failed++;
+        try { await db.collection('campaigns').doc(campaign.dbId).update({ lastError: errMsg }); } catch(e) {}
       }
-      await activeClient.sendMessage(peer, { message: uniqueMessage });
-      campaign.sent++;
-      console.log(`Sent successfully. Total sent: ${campaign.sent}`);
-      await db.collection('sent_users').doc(userId).set({ 
-        userId, 
-        sentAt: FieldValue.serverTimestamp() 
-      }, { merge: true });
-    } catch (error: any) {
-      console.error('Failed to send to', userId, error?.message || error);
-      campaign.failed++;
-      try { await db.collection('campaigns').doc(campaign.dbId).update({ lastError: error?.message || String(error) }); } catch(e) {}
     }
 
     try {
@@ -663,19 +682,17 @@ async function runCampaign() {
       console.error('Failed to update DB', e);
     }
 
-    if (campaign.users.length === 0) {
-      campaign.isRunning = false;
-      isCampaignRunning = false;
-      currentCampaign = null;
-      break;
-    }
-
-    // Minimum 3 seconds delay to prevent PEER_FLOOD
-    const baseMs = campaign.baseDelay * 1000;
-    const variation = baseMs * 0.3;
-    const delay = Math.max(3000, baseMs + (Math.random() * variation * 2 - variation));
+    // Delay with jitter to prevent PEER_FLOOD - minimum 8 seconds + human-like variation
+    const baseMs = Math.max(8000, campaign.baseDelay * 1000);
+    const jitter = Math.random() * 4000; // Random 0-4 second jitter
+    const extraVariation = Math.random() > 0.7 ? 2000 + Math.random() * 3000 : 0; // Occasional extra delay
+    const delay = baseMs + jitter + extraVariation;
     await sleep(delay);
   }
+
+  campaign.isRunning = false;
+  isCampaignRunning = false;
+  currentCampaign = null;
 }
 
 async function resumeCampaigns() {

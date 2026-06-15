@@ -756,58 +756,6 @@ return (
               </div>
             </div>
 
-            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm md:col-span-2 mt-6">
-               <h2 className="text-xl font-bold mb-4 text-gray-900">Campaign History</h2>
-               <div className="overflow-x-auto">
-                 <table className="w-full text-left border-collapse">
-                   <thead>
-                     <tr className="bg-gray-100 text-gray-700">
-                       <th className="p-3 border-b">Date</th>
-                       <th className="p-3 border-b">Message</th>
-                       <th className="p-3 border-b">Status</th>
-                       <th className="p-3 border-b">Progress</th>
-                     </tr>
-                   </thead>
-                   <tbody>
-                     {paginatedHistory.length > 0 ? paginatedHistory.map((h, i) => (
-                       <tr key={h.id || i} className="border-b hover:bg-gray-50 transition-colors">
-                         <td className="p-3 text-sm text-gray-600 whitespace-nowrap">{h.createdAt ? new Date(h.createdAt).toLocaleString() : 'N/A'}</td>
-                         <td className="p-3 text-sm font-medium text-gray-800 max-w-xs truncate" title={h.message}>{h.message}</td>
-                         <td className="p-3 text-sm">
-                           <span className={`px-2 py-1 rounded text-xs font-bold ${h.status === 'Completed' ? 'bg-green-100 text-green-700' : h.status === 'Stopped' ? 'bg-red-100 text-red-700' : h.status === 'Paused' ? 'bg-yellow-100 text-yellow-700' : 'bg-blue-100 text-blue-700'}`}>
-                             {h.status}
-                           </span>
-                         </td>
-                         <td className="p-3 text-sm text-gray-700 font-semibold">{h.sentCount || 0} / {h.totalUsers || 0}</td>
-                       </tr>
-                     )) : (
-                       <tr><td colSpan={4} className="p-6 text-center text-gray-500">No campaigns yet</td></tr>
-                     )}
-                   </tbody>
-                 </table>
-               </div>
-               {totalPages > 1 && (
-                 <div className="flex items-center justify-center gap-4 mt-6">
-                   <button
-                     onClick={() => setHistoryPage(p => Math.max(1, p - 1))}
-                     disabled={historyPage === 1}
-                     className="p-2 rounded bg-gray-100 hover:bg-gray-200 text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                   >
-                     <ChevronLeft size={20} />
-                   </button>
-                   <span className="text-gray-700 font-medium text-sm">
-                     Page {historyPage} of {totalPages}
-                   </span>
-                   <button
-                     onClick={() => setHistoryPage(p => Math.min(totalPages, p + 1))}
-                     disabled={historyPage === totalPages}
-                     className="p-2 rounded bg-gray-100 hover:bg-gray-200 text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                   >
-                     <ChevronRight size={20} />
-                   </button>
-                 </div>
-               )}
-            </div>
          </div>
        </div>
      </div>
