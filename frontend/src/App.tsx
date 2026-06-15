@@ -15,7 +15,7 @@ axios.interceptors.request.use(config => {
 
 type Step = 'PHONE' | 'CODE' | 'DASHBOARD' | 'SAVE_SESSION';
 type Group = { id: string; title: string };
-type Member = { id: string; username?: string; firstName?: string; status?: string; isBot?: boolean; isDeleted?: boolean };
+type Member = { id: string; username?: string; firstName?: string; status?: string; isBot?: boolean; isDeleted?: boolean; accessHash?: string; };
 type MemberStats = { total: number; activeToday: number; activeWeek: number; inactive: number; bots: number; deleted: number; unknown: number; };
 type CampaignStatus = {
   id?: number;
@@ -292,7 +292,7 @@ function App() {
 
     try {
       const skip = Math.max(0, Number(skipCount) || 0);
-      const users = members.map(member => member.id).filter(Boolean);
+      const users = members.filter(member => member.id).map(member => ({ id: member.id, accessHash: member.accessHash, username: member.username }));
 
       if (useManualDelay) {
         const delaySeconds = Number(manualDelay);

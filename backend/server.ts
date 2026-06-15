@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import crypto from 'node:crypto';
-import { TelegramClient } from 'telegram';
+import { TelegramClient, Api } from 'telegram';
 import { StringSession } from 'telegram/sessions';
 import { FieldValue } from 'firebase-admin/firestore';
 import { initDb, getDb } from './models';
@@ -371,6 +371,7 @@ app.post('/api/telegram/members', async (req, res) => {
 
         return {
           id: p.id?.toString() || '',
+          accessHash: p.accessHash?.toString(),
           username: p.username,
           firstName: p.firstName,
           status,
@@ -473,8 +474,13 @@ app.post('/api/campaign/start', async (req, res) => {
   }
 
   const messageText = typeof req.body.message === 'string' ? req.body.message.trim() : '';
-  const rawUsers: unknown[] = Array.isArray(req.body.users) ? req.body.users : [];
-  const users = Array.from(new Set(rawUsers.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)));
+  const rawUsers: any[] = Array.isArray(req.body.users) ? req.body.users : [];
+  const uniqueUsersMap = new Map();
+  for (const u of rawUsers) {
+    if (typeof u === 'string' && u.trim().length > 0) uniqueUsersMap.set(u, u);
+    else if (typeof u === 'object' && u.id) uniqueUsersMap.set(u.id, u);
+  }
+  const users = Array.from(uniqueUsersMap.values());
   const totalTimeHours = Number(req.body.totalTimeHours);
   const manualDelaySeconds = Number(req.body.manualDelaySeconds);
   const isManual = req.body.manualDelaySeconds !== undefined;
@@ -667,8 +673,9 @@ async function runCampaign() {
   const db = getDb();
 
   while (isCampaignRunning && campaign.isRunning && campaign.users.length > 0) {
-    const userId = campaign.users.shift();
-    if (!userId) continue;
+    const userObj = campaign.users.shift();
+    if (!userObj) continue;
+    const userIdStr = typeof userObj === 'object' ? userObj.id : userObj;
 
     let attempts = 0;
     let sent = false;
@@ -676,27 +683,35 @@ async function runCampaign() {
     while (attempts < 3 && !sent) {
       try {
         const uniqueMessage = antiBanSpin(campaign.message);
-        console.log(`Sending to ${userId} (attempt ${attempts + 1})...`);
+        console.log(`Sending to ${userIdStr} (attempt ${attempts + 1})...`);
         
         // Resolve user ID to InputPeer
         let peer;
-        try {
-          peer = await activeClient.getInputEntity(BigInt(userId) as any);
-        } catch (e) {
-          peer = await activeClient.getInputEntity(userId);
+        if (typeof userObj === 'object' && userObj.id) {
+            if (userObj.accessHash) {
+                peer = new Api.InputPeerUser({ userId: BigInt(userObj.id), accessHash: BigInt(userObj.accessHash) });
+            } else if (userObj.username) {
+                peer = userObj.username;
+            } else {
+                try { peer = await activeClient.getInputEntity(BigInt(userObj.id) as any); }
+                catch (e) { peer = await activeClient.getInputEntity(userObj.id); }
+            }
+        } else {
+            try { peer = await activeClient.getInputEntity(BigInt(userObj) as any); }
+            catch (e) { peer = await activeClient.getInputEntity(userObj); }
         }
         
         await activeClient.sendMessage(peer, { message: uniqueMessage });
         sent = true;
         campaign.sent++;
         console.log(`Sent successfully. Total sent: ${campaign.sent}`);
-        await db.collection('sent_users').doc(userId).set({ 
-          userId, 
+        await db.collection('sent_users').doc(userIdStr).set({ 
+          userId: userIdStr, 
           sentAt: FieldValue.serverTimestamp() 
         }, { merge: true });
       } catch (error: any) {
         const errMsg = error?.message || String(error);
-        console.error('Failed to send to', userId, errMsg);
+        console.error('Failed to send to', userIdStr, errMsg);
         
         // Check for FLOOD_WAIT or PEER_FLOOD error
         const floodMatch = errMsg.match(/FLOOD_WAIT[_ ]*(\d+)/i);
