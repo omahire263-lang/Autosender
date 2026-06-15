@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
-import { Play, Square, Edit3, Users, Settings, Phone, Key, LogOut, MessageCircle, X } from 'lucide-react';
+import { Play, Edit3, Users, Settings, Phone, Key, LogOut, MessageCircle, X } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 axios.defaults.withCredentials = true;
