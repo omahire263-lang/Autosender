@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
-import { Play, Square, Edit3, Users, Settings, Phone, Key, LogOut, MessageCircle, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Play, Square, Edit3, Users, Settings, Phone, Key, LogOut, MessageCircle, X } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 axios.defaults.withCredentials = true;
@@ -60,20 +60,12 @@ function App() {
   const [useManualDelay, setUseManualDelay] = useState(false);
   const [skipCount, setSkipCount] = useState<string | number>(0);
   const [campaignStatus, setCampaignStatus] = useState<CampaignStatus | null>(null);
-  const [history, setHistory] = useState<CampaignStatus[]>([]);
   const [isRunning, setIsRunning] = useState(false);
-  const [historyPage, setHistoryPage] = useState(1);
-  const itemsPerPage = 15;
 
-  const paginatedHistory = useMemo(() => {
-    const start = (historyPage - 1) * itemsPerPage;
-    return history.slice(start, start + itemsPerPage);
-  }, [history, historyPage]);
-  const totalPages = Math.ceil(history.length / itemsPerPage) || 1;
 
   const [isGroupsLoading, setIsGroupsLoading] = useState(false);
   const [memberStats, setMemberStats] = useState<MemberStats | null>(null);
-  const [activeFilter, setActiveFilter] = useState<'all' | 'activeToday' | 'activeWeek' | 'active'>('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'activeToday' | 'activeWeek' | 'active' | 'unknown'>('all');
   const [allExtractedMembers, setAllExtractedMembers] = useState<Member[]>([]);
 
   const fetchGroups = useCallback(async () => {
@@ -100,18 +92,6 @@ function App() {
     }
   }, []);
 
-  const fetchHistory = useCallback(async () => {
-    try {
-      const res = await axios.get<{ history: CampaignStatus[] }>(`${API_URL}/campaign/history`);
-      setHistory(res.data.history || []);
-    } catch (error) {
-      console.error(error);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (step === 'DASHBOARD') fetchHistory();
-  }, [step, fetchHistory]);
 
   const initSession = useCallback(async () => {
     setIsLoading(true);
@@ -327,7 +307,6 @@ function App() {
 
       setIsRunning(true);
       await fetchStatus();
-      await fetchHistory();
     } catch (error) {
       alert(`Failed to start campaign: ${getErrorMessage(error, 'Something went wrong')}`);
     }
@@ -338,7 +317,6 @@ function App() {
       await axios.post(`${API_URL}/campaign/pause-all`);
       setIsRunning(false);
       await fetchStatus();
-      await fetchHistory();
     } catch (error) {
       console.error(error);
     }
@@ -349,7 +327,6 @@ function App() {
       await axios.post(`${API_URL}/campaign/stop-all`);
       setIsRunning(false);
       await fetchStatus();
-      await fetchHistory();
     } catch (error) {
       console.error(error);
     }
