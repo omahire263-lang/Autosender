@@ -524,9 +524,14 @@ return (
           <h1 className="text-3xl sm:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 flex items-center gap-3">
             <Users className="text-blue-400" size={32} /> Auto-Sender
           </h1>
-          <button onClick={handleLogout} className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-semibold transition-colors">
-            <LogOut size={18} /> Logout
-          </button>
+          <div className="flex gap-2">
+            <button onClick={() => setStep('PHONE')} className="flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-lg font-semibold transition-colors shadow-sm">
+              + Add Account
+            </button>
+            <button onClick={handleLogout} className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-semibold transition-colors">
+              <LogOut size={18} /> Logout
+            </button>
+          </div>
         </div>
 
         {dashboardUser && (
