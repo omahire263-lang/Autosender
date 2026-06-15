@@ -702,16 +702,24 @@ async function runCampaign() {
         const floodMatch = errMsg.match(/FLOOD_WAIT[_ ]*(\d+)/i);
         const isPeerFlood = /PEER_FLOOD/i.test(errMsg);
         
-        if ((floodMatch || isPeerFlood) && attempts < 2) {
-          const waitSeconds = floodMatch ? parseInt(floodMatch[1]) : 60;
-          console.log(`FLOOD detected (${isPeerFlood ? 'PEER_FLOOD' : 'FLOOD_WAIT'}), waiting ${waitSeconds + 15} seconds...`);
+        if (floodMatch && attempts < 2) {
+          const waitSeconds = parseInt(floodMatch[1]);
+          console.log(`FLOOD_WAIT detected, waiting ${waitSeconds + 15} seconds...`);
           await sleep((waitSeconds + 15) * 1000);
           attempts++;
           continue;
         }
+        if (isPeerFlood) {
+          console.log('PEER_FLOOD detected. Account restricted. Pausing campaign.');
+          try { await db.collection('campaigns').doc(campaign.dbId).update({ status: 'Paused', lastError: 'PEER_FLOOD: Account restricted. Please wait a few days.' }); } catch(e) {}
+          isCampaignRunning = false;
+          campaign.isRunning = false;
+          break;
+        }
         
         campaign.failed++;
         try { await db.collection('campaigns').doc(campaign.dbId).update({ lastError: errMsg }); } catch(e) {}
+        break;
       }
     }
 
@@ -826,8 +834,7 @@ initDb().then(async () => {
         client = nextClient;
         activeSessionToken = user.sessionToken;
         console.log('Auto-connected client successfully.');
-        
-        
+        resumeCampaigns();
       }
     }
   } catch (err) {
