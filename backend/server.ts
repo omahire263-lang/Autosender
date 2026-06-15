@@ -724,12 +724,12 @@ async function runCampaign() {
           attempts++;
           continue;
         }
-        if (isPeerFlood) {
-          console.log('PEER_FLOOD detected. Account restricted. Pausing campaign.');
-          try { await db.collection('campaigns').doc(campaign.dbId).update({ status: 'Paused', lastError: 'PEER_FLOOD: Account restricted. Please wait a few days.' }); } catch(e) {}
-          isCampaignRunning = false;
-          campaign.isRunning = false;
-          break;
+        // For PEER_FLOOD or any other error, retry exactly once
+        if (attempts < 1) {
+          console.log(`Error detected (${isPeerFlood ? 'PEER_FLOOD' : 'General'}), retrying 1 more time for ${userIdStr}...`);
+          await sleep(5000);
+          attempts++;
+          continue;
         }
         
         campaign.failed++;
