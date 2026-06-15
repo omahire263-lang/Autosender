@@ -312,15 +312,7 @@ function App() {
     }
   };
 
-  const stopCampaign = async () => {
-    try {
-      await axios.post(`${API_URL}/campaign/pause-all`);
-      setIsRunning(false);
-      await fetchStatus();
-    } catch (error) {
-      console.error(error);
-    }
-  };
+
 
   const closeAllCampaigns = async () => {
     try {
@@ -728,9 +720,6 @@ return (
                 </button>
                 {campaignStatus && isRunning && (
                   <div className="flex gap-2">
-                    <button onClick={stopCampaign} className="w-full flex items-center justify-center gap-2 bg-red-500 text-white hover:bg-red-600 px-6 py-3 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-[0_4px_14px_0_rgba(239,68,68,0.39)]">
-                      <Square fill="currentColor" /> Pause
-                    </button>
                     <button onClick={closeAllCampaigns} className="w-full flex items-center justify-center gap-2 bg-gray-800 text-white hover:bg-gray-900 px-6 py-3 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-[0_4px_14px_0_rgba(31,41,55,0.39)]">
                       <X fill="currentColor" /> Close
                     </button>
