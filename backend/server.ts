@@ -400,6 +400,22 @@ app.post('/api/telegram/members', async (req, res) => {
 
     const finalMembers = uniqueMembers.filter(m => !sentUserIds.has(m.id) && !m.isBot && !m.isDeleted);
 
+    // Save unknown users to contacts collection in Firebase for tracking
+    const unknownMembers = uniqueMembers.filter(m => m.status === 'unknown');
+    if (unknownMembers.length > 0) {
+      const batch = db.batch();
+      for (const member of unknownMembers) {
+        const contactRef = db.collection('contacts').doc(member.id);
+        batch.set(contactRef, {
+          userId: member.id,
+          username: member.username,
+          firstName: member.firstName,
+          savedAt: FieldValue.serverTimestamp()
+        }, { merge: true });
+      }
+      await batch.commit().catch(() => {});
+    }
+
     res.json({ members: finalMembers, stats });
   } catch (error) {
     res.status(500).json({ error: getErrorMessage(error) });
@@ -651,12 +667,14 @@ async function runCampaign() {
         const errMsg = error?.message || String(error);
         console.error('Failed to send to', userId, errMsg);
         
-        // Check for FLOOD_WAIT error
+        // Check for FLOOD_WAIT or PEER_FLOOD error
         const floodMatch = errMsg.match(/FLOOD_WAIT[_ ]*(\d+)/i);
-        if (floodMatch && attempts < 2) {
-          const waitSeconds = parseInt(floodMatch[1]);
-          console.log(`FLOOD_WAIT detected, waiting ${waitSeconds + 5} seconds...`);
-          await sleep((waitSeconds + 5) * 1000);
+        const isPeerFlood = /PEER_FLOOD/i.test(errMsg);
+        
+        if ((floodMatch || isPeerFlood) && attempts < 2) {
+          const waitSeconds = floodMatch ? parseInt(floodMatch[1]) : 30;
+          console.log(`FLOOD detected (${isPeerFlood ? 'PEER_FLOOD' : 'FLOOD_WAIT'}), waiting ${waitSeconds + 10} seconds...`);
+          await sleep((waitSeconds + 10) * 1000);
           attempts++;
           continue;
         }
