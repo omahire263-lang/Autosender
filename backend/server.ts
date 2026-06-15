@@ -456,7 +456,7 @@ res.json({ members: finalMembers, stats });
 interface CampaignState {
   dbId: string;
   message: string;
-  users: string[];
+  users: any[];
   sent: number;
   failed: number;
   baseDelay: number;
@@ -689,7 +689,7 @@ async function runCampaign() {
         let peer;
         if (typeof userObj === 'object' && userObj.id) {
             if (userObj.accessHash) {
-                peer = new Api.InputPeerUser({ userId: BigInt(userObj.id), accessHash: BigInt(userObj.accessHash) });
+                peer = new Api.InputPeerUser({ userId: BigInt(userObj.id) as any, accessHash: BigInt(userObj.accessHash) as any });
             } else if (userObj.username) {
                 peer = userObj.username;
             } else {
