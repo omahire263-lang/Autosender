@@ -35,9 +35,9 @@ app.get('/', (req, res) => res.status(200).send('Autosender Backend is running!'
 app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'ok', 
-    clientConnected: !!client,
+    clientConnected: connectedClients.length > 0,
     campaignRunning: isCampaignRunning,
-    sessionToken: activeSessionToken ? 'present' : 'none',
+    accountsCount: connectedClients.length,
     timestamp: new Date().toISOString()
   });
 });
@@ -56,8 +56,15 @@ if (!Number.isFinite(apiId) || apiId <= 0) {
   throw new Error('API_ID must be a valid positive number');
 }
 
-let client: TelegramClient | null = null;
-let activeSessionToken: string | null = null;
+interface AccountClient {
+  phoneNumber: string;
+  sessionToken: string;
+  client: TelegramClient;
+  messagesSent: number;
+}
+let connectedClients: AccountClient[] = [];
+let pendingAuthClient: TelegramClient | null = null;
+let pendingPhone: string | null = null;
 
 const getErrorMessage = (error: unknown) => {
   return error instanceof Error ? error.message : 'Unknown error';
@@ -98,13 +105,16 @@ const clearSessionCookie = (res: express.Response) => {
   );
 };
 
-const getActiveClient = async (res: express.Response): Promise<TelegramClient | null> => {
-  if (!client || !activeSessionToken) {
+const getActiveClient = async (req: express.Request, res: express.Response): Promise<TelegramClient | null> => {
+  const token = getSessionToken(req);
+  const acc = connectedClients.find(c => c.sessionToken === token);
+  if (!acc) {
+    // try to fallback to first account if any
+    if (connectedClients.length > 0) return connectedClients[0].client;
     res.status(401).json({ error: 'Not authenticated' });
     return null;
   }
-
-  return client;
+  return acc.client;
 };
 
 app.post('/api/auth/send-code', async (req, res) => {
@@ -120,8 +130,8 @@ app.post('/api/auth/send-code', async (req, res) => {
     await nextClient.connect();
 
     await nextClient.sendCode({ apiId, apiHash }, phone);
-    client = nextClient;
-    activeSessionToken = null;
+    pendingAuthClient = nextClient;
+    pendingPhone = phone;
 
     res.json({ success: true });
   } catch (error) {
@@ -156,8 +166,8 @@ app.post('/api/auth/login', async (req, res) => {
         createdAt: FieldValue.serverTimestamp()
       }, { merge: true });
 
-      client = nextClient;
-      activeSessionToken = sessionToken;
+      pendingAuthClient = nextClient;
+      pendingPhone = phone;
       setSessionCookie(res, sessionToken);
 
       
@@ -181,12 +191,12 @@ app.post('/api/auth/login', async (req, res) => {
     return res.status(400).json({ error: 'Code is required' });
   }
 
-  if (!client) {
+  if (!pendingAuthClient) {
     return res.status(400).json({ error: 'Send OTP first' });
   }
 
   try {
-    await client.signInUser(
+    await pendingAuthClient.signInUser(
       { apiId, apiHash },
       {
         phoneNumber: async () => phone,
@@ -196,8 +206,8 @@ app.post('/api/auth/login', async (req, res) => {
       }
     );
 
-    const savedSessionString = (client.session as StringSession).save() as string;
-    const me = await client.getMe();
+    const savedSessionString = (pendingAuthClient.session as StringSession).save() as string;
+    const me = await pendingAuthClient.getMe();
 
     if (!me) {
       return res.status(401).json({ error: 'Invalid session' });
@@ -213,7 +223,14 @@ app.post('/api/auth/login', async (req, res) => {
       createdAt: FieldValue.serverTimestamp()
     }, { merge: true });
 
-    activeSessionToken = sessionToken;
+    connectedClients.push({
+      phoneNumber: phone,
+      sessionToken,
+      client: pendingAuthClient,
+      messagesSent: 0
+    });
+    pendingAuthClient = null;
+    pendingPhone = null;
     setSessionCookie(res, sessionToken);
 
     
@@ -260,8 +277,12 @@ app.post('/api/auth/init', async (req, res) => {
       return res.status(401).json({ error: 'Invalid session' });
     }
 
-    client = nextClient;
-    activeSessionToken = sessionToken;
+    connectedClients.push({
+      phoneNumber: user.phoneNumber || '',
+      sessionToken: sessionToken,
+      client: nextClient,
+      messagesSent: 0
+    });
 
     
 
@@ -276,8 +297,8 @@ app.post('/api/auth/init', async (req, res) => {
 });
 
 app.post('/api/auth/logout', async (req, res) => {
-  client = null;
-  activeSessionToken = null;
+  const token = getSessionToken(req);
+  connectedClients = connectedClients.filter(c => c.sessionToken !== token);
   clearSessionCookie(res);
   res.json({ success: true });
 });
@@ -310,8 +331,12 @@ app.post('/api/auth/save-session', async (req, res) => {
       createdAt: FieldValue.serverTimestamp()
     }, { merge: true });
 
-    client = nextClient;
-    activeSessionToken = newToken;
+    connectedClients.push({
+      phoneNumber: phone || '',
+      sessionToken: newToken,
+      client: nextClient,
+      messagesSent: 0
+    });
     setSessionCookie(res, newToken);
 
     res.json({
@@ -325,7 +350,7 @@ app.post('/api/auth/save-session', async (req, res) => {
 });
 
 app.get('/api/telegram/groups', async (req, res) => {
-  const activeClient = await getActiveClient(res);
+  const activeClient = await getActiveClient(req, res);
   if (!activeClient) return;
 
   try {
@@ -338,7 +363,7 @@ app.get('/api/telegram/groups', async (req, res) => {
 });
 
 app.post('/api/telegram/members', async (req, res) => {
-  const activeClient = await getActiveClient(res);
+  const activeClient = await getActiveClient(req, res);
   if (!activeClient) return;
 
   try {
@@ -425,7 +450,7 @@ res.json({ members: finalMembers, stats });
 
   // Get unknown contacts saved in Firebase
   app.get('/api/telegram/unknown-contacts', async (req, res) => {
-    const activeClient = await getActiveClient(res);
+    const activeClient = await getActiveClient(req, res);
     if (!activeClient) return;
 
     try {
@@ -440,7 +465,7 @@ res.json({ members: finalMembers, stats });
 
   // Delete unknown contact from Firebase
   app.delete('/api/telegram/contacts/:userId', async (req, res) => {
-    const activeClient = await getActiveClient(res);
+    const activeClient = await getActiveClient(req, res);
     if (!activeClient) return;
 
     const userId = req.params.userId;
@@ -466,7 +491,7 @@ let currentCampaign: CampaignState | null = null;
 let isCampaignRunning = false;
 
 app.post('/api/campaign/start', async (req, res) => {
-  const activeClient = await getActiveClient(res);
+  const activeClient = await getActiveClient(req, res);
   if (!activeClient) return;
 
   if (isCampaignRunning) {
@@ -663,7 +688,7 @@ function antiBanSpin(text: string): string {
 }
 
 async function runCampaign() {
-  const activeClient = client;
+  const activeClient = connectedClients.length > 0 ? connectedClients[0].client : null;
   if (!activeClient || !currentCampaign) {
     console.log('runCampaign: No client or campaign', { hasClient: !!activeClient, hasCampaign: !!currentCampaign });
     return;
@@ -805,31 +830,13 @@ initDb().then(async () => {
   // Periodic client health check and reconnect
   const HEALTH_CHECK_INTERVAL = 1000 * 60 * 5; // 5 minutes
   const reconnectClient = async () => {
-    if (client && activeSessionToken) {
+    for (const acc of connectedClients) {
       try {
-        await client.getMe();
+        await acc.client.getMe();
       } catch (err) {
-        console.log('Client disconnected, attempting reconnect...');
-        try {
-          const db = getDb();
-          const userSnap = await db.collection('users').where('sessionToken', '==', activeSessionToken).limit(1).get();
-          if (!userSnap.empty) {
-            const user = userSnap.docs[0].data();
-            if (user.sessionString) {
-              const stringSession = new StringSession(user.sessionString);
-              const nextClient = new TelegramClient(stringSession, apiId, apiHash, { connectionRetries: 5 });
-              await nextClient.connect();
-              client = nextClient;
-              console.log('Reconnected successfully');
-              // Resume campaign if one was in progress
-              resumeCampaigns();
-            }
-          }
-        } catch (reconnectErr) {
-          console.error('Reconnect failed:', reconnectErr);
-          client = null;
-          activeSessionToken = null;
-        }
+        console.log(`Client ${acc.phoneNumber} disconnected.`);
+        // Remove from connected clients to avoid using dead sessions
+        connectedClients = connectedClients.filter(c => c.sessionToken !== acc.sessionToken);
       }
     }
   };
@@ -838,20 +845,28 @@ initDb().then(async () => {
 
   try {
     const db = getDb();
-    const userSnap = await db.collection('users').orderBy('createdAt', 'desc').limit(1).get();
-    if (!userSnap.empty) {
-      const user = userSnap.docs[0].data();
+    const userSnap = await db.collection('users').get();
+    for (const doc of userSnap.docs) {
+      const user = doc.data();
       if (user.sessionString) {
-        console.log('Auto-connecting client on startup...');
-        const stringSession = new StringSession(user.sessionString);
-        const nextClient = new TelegramClient(stringSession, apiId, apiHash, { connectionRetries: 5 });
-        await nextClient.connect();
-        client = nextClient;
-        activeSessionToken = user.sessionToken;
-        console.log('Auto-connected client successfully.');
-        resumeCampaigns();
+        console.log(`Auto-connecting client ${user.phoneNumber} on startup...`);
+        try {
+          const stringSession = new StringSession(user.sessionString);
+          const nextClient = new TelegramClient(stringSession, apiId, apiHash, { connectionRetries: 5 });
+          await nextClient.connect();
+          connectedClients.push({
+            phoneNumber: user.phoneNumber || '',
+            sessionToken: user.sessionToken,
+            client: nextClient,
+            messagesSent: 0
+          });
+          console.log(`Auto-connected ${user.phoneNumber} successfully.`);
+        } catch (err) {
+          console.error(`Failed to auto-connect ${user.phoneNumber}`);
+        }
       }
     }
+    resumeCampaigns();
   } catch (err) {
     console.error('Auto-resume failed:', err);
   }
