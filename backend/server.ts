@@ -655,6 +655,7 @@ async function runCampaign() {
         } catch (e) {
           peer = await activeClient.getInputEntity(userId);
         }
+        
         await activeClient.sendMessage(peer, { message: uniqueMessage });
         sent = true;
         campaign.sent++;
