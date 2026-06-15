@@ -288,9 +288,10 @@ function App() {
     }
   };
 
-  const applyFilter = (filter: 'all' | 'activeToday' | 'activeWeek' | 'active') => {
+  const applyFilter = (filter: 'all' | 'activeToday' | 'activeWeek' | 'active' | 'unknown') => {
     setActiveFilter(filter);
     if (filter === 'all') setMembers(allExtractedMembers);
+    else if (filter === 'unknown') setMembers(allExtractedMembers.filter(m => m.status === 'unknown'));
     else if (filter === 'active') setMembers(allExtractedMembers.filter(m => m.status === 'activeToday' || m.status === 'activeWeek'));
     else setMembers(allExtractedMembers.filter(m => m.status === filter));
   };
@@ -303,6 +304,11 @@ function App() {
 
   const startCampaign = async () => {
     if (!members.length) return alert('Extract members first');
+    
+    const unknownCount = members.filter(m => m.status === 'unknown').length;
+    if (unknownCount > 0 && !confirm(`${unknownCount} unknown users included. They may cause PEER_FLOOD errors. Continue?`)) {
+      return;
+    }
 
     try {
       const skip = Math.max(0, Number(skipCount) || 0);

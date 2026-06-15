@@ -416,11 +416,41 @@ app.post('/api/telegram/members', async (req, res) => {
       await batch.commit().catch(() => {});
     }
 
-    res.json({ members: finalMembers, stats });
-  } catch (error) {
-    res.status(500).json({ error: getErrorMessage(error) });
-  }
-});
+res.json({ members: finalMembers, stats });
+    } catch (error) {
+      res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // Get unknown contacts saved in Firebase
+  app.get('/api/telegram/unknown-contacts', async (req, res) => {
+    const activeClient = await getActiveClient(res);
+    if (!activeClient) return;
+
+    try {
+      const db = getDb();
+      const snap = await db.collection('contacts').limit(100).get();
+      const contacts = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      res.json({ contacts });
+    } catch (error) {
+      res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
+
+  // Delete unknown contact from Firebase
+  app.delete('/api/telegram/contacts/:userId', async (req, res) => {
+    const activeClient = await getActiveClient(res);
+    if (!activeClient) return;
+
+    const userId = req.params.userId;
+    try {
+      const db = getDb();
+      await db.collection('contacts').doc(userId).delete();
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: getErrorMessage(error) });
+    }
+  });
 
 interface CampaignState {
   dbId: string;
@@ -673,9 +703,9 @@ async function runCampaign() {
         const isPeerFlood = /PEER_FLOOD/i.test(errMsg);
         
         if ((floodMatch || isPeerFlood) && attempts < 2) {
-          const waitSeconds = floodMatch ? parseInt(floodMatch[1]) : 30;
-          console.log(`FLOOD detected (${isPeerFlood ? 'PEER_FLOOD' : 'FLOOD_WAIT'}), waiting ${waitSeconds + 10} seconds...`);
-          await sleep((waitSeconds + 10) * 1000);
+          const waitSeconds = floodMatch ? parseInt(floodMatch[1]) : 60;
+          console.log(`FLOOD detected (${isPeerFlood ? 'PEER_FLOOD' : 'FLOOD_WAIT'}), waiting ${waitSeconds + 15} seconds...`);
+          await sleep((waitSeconds + 15) * 1000);
           attempts++;
           continue;
         }
