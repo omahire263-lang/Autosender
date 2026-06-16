@@ -152,8 +152,8 @@ function App() {
     try {
       const grpRes = await axios.get<{ groups: {id: string, subject: string, isAdmin: boolean}[] }>(`${API_URL}/whatsapp/groups`);
       setWaGroups(grpRes.data.groups || []);
-    } catch (error) {
-      alert('Failed to load groups');
+    } catch (error: any) {
+      alert(`Failed to load groups: ${error.response?.data?.error || error.message}`);
     } finally {
       setIsGroupsRefreshing(false);
     }

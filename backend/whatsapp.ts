@@ -251,7 +251,7 @@ whatsappRouter.get('/groups', async (req, res) => {
         const myJid = jidNormalizedUser(sock.user?.id);
 
         const groups = Object.values(chats).map(g => {
-            const isAdmin = g.participants.some(p => jidNormalizedUser(p.id) === myJid && (p.admin === 'admin' || p.admin === 'superadmin'));
+            const isAdmin = (g.participants || []).some(p => jidNormalizedUser(p.id) === myJid && (p.admin === 'admin' || p.admin === 'superadmin'));
             return { id: g.id, subject: g.subject, isAdmin };
         });
 
