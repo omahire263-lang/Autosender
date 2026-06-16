@@ -12,6 +12,7 @@ import {
 } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import express from 'express';
+import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import { Boom } from '@hapi/boom';
 import { getDb } from './models';
 import { antiBanSpin } from './server';
@@ -379,8 +380,19 @@ whatsappRouter.post('/extract-group', async (req, res) => {
         
         const participants = metadata.participants || [];
         const phoneNumbers = participants
-            .map(p => p.id.split('@')[0])
-            .filter(phone => phone && phone.length > 5); // Basic validation
+            .map(p => {
+                if (!p.id.includes('@s.whatsapp.net')) return null;
+                const rawNumber = p.id.split('@')[0].split(':')[0];
+                if (!rawNumber || rawNumber.length < 5) return null;
+                try {
+                    const parsed = parsePhoneNumberFromString('+' + rawNumber);
+                    if (parsed) return `+${parsed.countryCallingCode} ${parsed.nationalNumber}`;
+                    return '+' + rawNumber;
+                } catch {
+                    return '+' + rawNumber;
+                }
+            })
+            .filter((phone): phone is string => phone !== null);
 
         // Send the response back to the user immediately
         res.json({
@@ -461,8 +473,19 @@ whatsappRouter.post('/extract-existing-group', async (req, res) => {
         
         const participants = metadata.participants || [];
         const phoneNumbers = participants
-            .map(p => p.id.split('@')[0])
-            .filter(phone => phone && phone.length > 5); // Basic validation
+            .map(p => {
+                if (!p.id.includes('@s.whatsapp.net')) return null;
+                const rawNumber = p.id.split('@')[0].split(':')[0];
+                if (!rawNumber || rawNumber.length < 5) return null;
+                try {
+                    const parsed = parsePhoneNumberFromString('+' + rawNumber);
+                    if (parsed) return `+${parsed.countryCallingCode} ${parsed.nationalNumber}`;
+                    return '+' + rawNumber;
+                } catch {
+                    return '+' + rawNumber;
+                }
+            })
+            .filter((phone): phone is string => phone !== null);
 
         res.json({
             success: true,
