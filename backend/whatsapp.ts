@@ -52,10 +52,11 @@ async function useFirestoreAuthState(): Promise<{ state: AuthenticationState; sa
                 return result;
             },
             set: async (data) => {
-                for (const category in data) {
-                    for (const id in data[category]) {
+                const anyData = data as any;
+                for (const category in anyData) {
+                    for (const id in anyData[category]) {
                         const keyId = `${category}-${id}`;
-                        const value = (data as any)[category][id];
+                        const value = anyData[category][id];
                         if (value) {
                             keys[keyId] = value;
                         } else {
