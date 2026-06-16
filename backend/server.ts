@@ -1071,7 +1071,16 @@ async function resumeCampaigns() {
 
 initDb().then(async () => {
   console.log('Firebase DB initialized');
-  app.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
+  
+  // Start Server
+  app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+    
+    // Auto-initialize WhatsApp connection on server start
+    import('./whatsapp').then(wa => {
+      wa.initWhatsApp().catch(console.error);
+    });
+  });
 
   // Periodic client health check and reconnect
   const HEALTH_CHECK_INTERVAL = 1000 * 60 * 5; // 5 minutes

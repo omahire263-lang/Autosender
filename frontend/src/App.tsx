@@ -229,6 +229,14 @@ function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, [step]);
 
+  // Poll WA connection status every 5s when on WA page (auto-detects QR scan)
+  useEffect(() => {
+    if (platform !== 'WHATSAPP') return;
+    fetchWaStatus(); // immediate check
+    const interval = setInterval(fetchWaStatus, 5000);
+    return () => clearInterval(interval);
+  }, [platform, fetchWaStatus]);
+
   const estimatedDelay = useMemo(() => {
     const val = Number(durationValue) || 0;
     const totalHours = durationType === 'minutes' ? val / 60 : val;
@@ -612,9 +620,25 @@ if (platform === 'NONE') {
                 Back Home
               </button>
               {isWaConnected && (
-                <button onClick={copyWaSessionString} className="flex items-center gap-2 bg-green-100 hover:bg-green-200 text-green-800 px-4 py-2 rounded-lg font-semibold transition-colors">
-                  Copy Session
-                </button>
+                <>
+                  <button onClick={copyWaSessionString} className="flex items-center gap-2 bg-green-100 hover:bg-green-200 text-green-800 px-4 py-2 rounded-lg font-semibold transition-colors">
+                    Copy Session
+                  </button>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await axios.post(`${API_URL}/whatsapp/auth/logout`);
+                        setIsWaConnected(false);
+                        alert('Logged out from WhatsApp.');
+                      } catch (e) {
+                        alert('Failed to logout');
+                      }
+                    }}
+                    className="flex items-center gap-2 bg-red-100 hover:bg-red-200 text-red-700 px-4 py-2 rounded-lg font-semibold transition-colors"
+                  >
+                    <LogOut size={16} /> Logout WA
+                  </button>
+                </>
               )}
             </div>
           </div>

@@ -469,36 +469,16 @@ whatsappRouter.post('/extract-existing-group', async (req, res) => {
 
     try {
         console.log(`Fetching participants for existing group: ${groupId}`);
-        
-        let participants: any[] = [];
-        let subject = 'Unknown Group';
 
-        // Try getting from already fetched participating groups first
-        try {
-            const groups = await activeSock.groupFetchAllParticipating();
-            if (groups[groupId]) {
-                participants = groups[groupId].participants || [];
-                subject = groups[groupId].subject || subject;
-            }
-        } catch (err) {
-            console.log('Could not fetch from participating list, fallback to metadata...');
-        }
+        // Always use groupMetadata — groupFetchAllParticipating returns @lid IDs
+        // (WhatsApp multi-device internal IDs, not phone numbers)
+        const metadata = await activeSock.groupMetadata(groupId);
+        const participants = metadata.participants || [];
+        const subject = metadata.subject || 'Unknown Group';
 
-        // If participants is empty, fallback to metadata
-        if (participants.length === 0) {
-            try {
-                const metadata = await activeSock.groupMetadata(groupId);
-                participants = metadata.participants || [];
-                subject = metadata.subject || subject;
-            } catch (metaErr: any) {
-                console.error(`Metadata fetch failed for ${groupId}:`, metaErr.message);
-                if (metaErr.message?.includes('forbidden') || metaErr.message?.includes('403')) {
-                    return res.status(403).json({ 
-                        error: 'WhatsApp has restricted the member list for this group (e.g. Announcement group or Community). Normal members cannot extract data from it.' 
-                    });
-                }
-            }
-        }
+        console.log(`Got ${participants.length} raw participants for "${subject}"`);
+        // Debug: log first few IDs to check format
+        participants.slice(0, 5).forEach(p => console.log('  participant id:', p.id));
         const phoneNumbers = participants
             .map(p => {
                 if (!p.id || p.id.includes('@lid') || p.id.includes('@g.us')) return null;
