@@ -222,16 +222,23 @@ whatsappRouter.post('/auth/login-session', async (req, res) => {
     }
 });
 
-// Pairing code login
+// Pairing code login - uses FRESH socket, ignores stored session
 whatsappRouter.post('/auth/pair', async (req, res) => {
     let phone = req.body.phone?.replace(/[^0-9]/g, '');
     if (!phone) return res.status(400).json({ error: 'Phone number is required' });
 
     try {
-        if (!sock) {
-            await initWhatsApp();
-            await delay(4000);
+        if (sock) {
+            try { await sock.logout(); } catch {}
+            sock = null;
         }
+
+        const db = getDb();
+        const docRef = db.collection('whatsapp_sessions').doc(WA_SESSION_DOC);
+        await docRef.delete().catch(() => {});
+
+        await initWhatsApp();
+        await delay(5000);
 
         if (!sock) {
             return res.status(500).json({ error: 'Failed to initialize WhatsApp. Please try again.' });
