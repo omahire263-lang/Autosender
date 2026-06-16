@@ -6,7 +6,8 @@ import {
     BufferJSON,
     proto,
     AuthenticationState,
-    SignalDataTypeMap
+    SignalDataTypeMap,
+    jidNormalizedUser
 } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import express from 'express';
@@ -201,12 +202,12 @@ whatsappRouter.get('/groups', async (req, res) => {
 
     try {
         const chats = await sock.groupFetchAllParticipating();
-        const myJid = sock.user?.id?.split(':')[0] + '@s.whatsapp.net';
+        const myJid = jidNormalizedUser(sock.user?.id);
 
         const groups = Object.values(chats).map(g => {
-            const isAdmin = g.participants.some(p => p.id === myJid && (p.admin === 'admin' || p.admin === 'superadmin'));
+            const isAdmin = g.participants.some(p => jidNormalizedUser(p.id) === myJid && (p.admin === 'admin' || p.admin === 'superadmin'));
             return { id: g.id, subject: g.subject, isAdmin };
-        });
+        }).filter(g => g.isAdmin);
 
         res.json({ groups });
     } catch (e: any) {

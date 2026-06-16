@@ -552,17 +552,10 @@ if (platform === 'NONE') {
                   value={waSelectedGroup} onChange={e => setWaSelectedGroup(e.target.value)}
                   className="w-full bg-gray-100 border border-gray-300 text-gray-900 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 mb-4"
                 >
-                  <option value="">-- Select Group ({waGroups.filter(g => g.isAdmin).length} admin groups) --</option>
-                  {waGroups.filter(g => g.isAdmin).map(g => (
+                  <option value="">-- Select Group --</option>
+                  {waGroups.map(g => (
                     <option key={g.id} value={g.id}>👑 {g.subject}</option>
                   ))}
-                  {waGroups.filter(g => !g.isAdmin).length > 0 && (
-                    <optgroup label="── Other Groups ──">
-                      {waGroups.filter(g => !g.isAdmin).map(g => (
-                        <option key={g.id} value={g.id}>{g.subject}</option>
-                      ))}
-                    </optgroup>
-                  )}
                 </select>
 
                 <button onClick={addWaGroupMembers} className="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-lg font-bold transition-colors shadow-sm">
