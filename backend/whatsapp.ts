@@ -154,15 +154,17 @@ whatsappRouter.get('/auth/session-string', async (req, res) => {
 });
 
 whatsappRouter.post('/auth/login-session', async (req, res) => {
-    const { sessionString } = req.body;
+    let { sessionString } = req.body;
     if (!sessionString) return res.status(400).json({ error: 'Session string is required' });
 
     try {
+        // Remove any whitespace, newlines, or invisible characters
+        sessionString = sessionString.replace(/\s+/g, '').trim();
         const jsonStr = Buffer.from(sessionString, 'base64').toString('utf-8');
         const data = JSON.parse(jsonStr);
         
         if (!data.creds) {
-            return res.status(400).json({ error: 'Invalid session string format' });
+            return res.status(400).json({ error: 'Invalid session string format (missing creds)' });
         }
 
         const db = getDb();
@@ -251,7 +253,7 @@ whatsappRouter.get('/groups', async (req, res) => {
         const groups = Object.values(chats).map(g => {
             const isAdmin = g.participants.some(p => jidNormalizedUser(p.id) === myJid && (p.admin === 'admin' || p.admin === 'superadmin'));
             return { id: g.id, subject: g.subject, isAdmin };
-        }).filter(g => g.isAdmin);
+        });
 
         res.json({ groups });
     } catch (e: any) {
