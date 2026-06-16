@@ -306,7 +306,7 @@ whatsappRouter.post('/auth/logout', async (req, res) => {
     res.json({ success: true });
 });
 
-// ─── Extract Members via Invite Link ─────────────────────────────────────────
+// ─── Extract Members via Invite Link (Safe Mode for Personal Numbers) ──────────
 whatsappRouter.post('/extract-group', async (req, res) => {
     const activeSock = getActiveSocket();
     if (!activeSock) return res.status(400).json({ error: 'WhatsApp not connected' });
@@ -327,6 +327,11 @@ whatsappRouter.post('/extract-group', async (req, res) => {
             return res.status(400).json({ error: 'Invalid WhatsApp group link format' });
         }
 
+        // Anti-ban: Human-like delay before joining (2 to 5 seconds)
+        const joinDelay = Math.floor(Math.random() * 3000) + 2000;
+        console.log(`[Anti-Ban] Waiting ${joinDelay}ms before joining...`);
+        await delay(joinDelay);
+
         // Join the group using the invite code
         console.log(`Joining group with code: ${code}`);
         const groupId = await activeSock.groupAcceptInvite(code);
@@ -334,6 +339,11 @@ whatsappRouter.post('/extract-group', async (req, res) => {
         if (!groupId) {
              return res.status(400).json({ error: 'Failed to join group. The link might be invalid or expired.' });
         }
+
+        // Anti-ban: Human-like delay before fetching metadata (3 to 6 seconds)
+        const metaDelay = Math.floor(Math.random() * 3000) + 3000;
+        console.log(`[Anti-Ban] Waiting ${metaDelay}ms before fetching metadata...`);
+        await delay(metaDelay);
 
         // Fetch metadata to get participants
         console.log(`Successfully joined group ${groupId}. Fetching metadata...`);
@@ -344,13 +354,34 @@ whatsappRouter.post('/extract-group', async (req, res) => {
             .map(p => p.id.split('@')[0])
             .filter(phone => phone && phone.length > 5); // Basic validation
 
+        // Send the response back to the user immediately
         res.json({
             success: true,
             groupId,
             subject: metadata.subject,
             participantCount: phoneNumbers.length,
-            members: phoneNumbers
+            members: phoneNumbers,
+            message: "Data extracted. The bot will safely leave the group in a few seconds."
         });
+
+        // Anti-ban: Automatically leave the group so it doesn't clutter the user's personal WhatsApp
+        // We wait 5 to 10 seconds after extraction before leaving to make it look less like a bot.
+        setTimeout(async () => {
+            try {
+                const leaveDelay = Math.floor(Math.random() * 5000) + 5000;
+                console.log(`[Anti-Ban] Waiting ${leaveDelay}ms to silently leave group ${groupId}...`);
+                await delay(leaveDelay);
+                
+                const currentSock = getActiveSocket();
+                if (currentSock) {
+                    await currentSock.groupLeave(groupId);
+                    console.log(`[Anti-Ban] Successfully left group ${groupId} to prevent clutter.`);
+                }
+            } catch (leaveErr) {
+                console.error(`Failed to auto-leave group ${groupId}:`, leaveErr);
+            }
+        }, 1000); // Trigger the timeout asynchronously
+
     } catch (e: any) {
         console.error('Error extracting group members:', e);
         
@@ -359,6 +390,8 @@ whatsappRouter.post('/extract-group', async (req, res) => {
             errorMsg = 'Not authorized to join this group or link revoked.';
         } else if (errorMsg.includes('item-not-found')) {
             errorMsg = 'Group not found or invite link expired.';
+        } else if (errorMsg.includes('429') || errorMsg.includes('rate-overlimit')) {
+            errorMsg = 'Rate limit reached! WhatsApp temporarily blocked joining. Try again after 1-2 hours.';
         }
         
         res.status(500).json({ error: errorMsg });
