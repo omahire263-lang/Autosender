@@ -265,8 +265,12 @@ app.post('/api/auth/login', async (req, res) => {
       token: sessionToken,
       sessionString: savedSessionString
     });
-  } catch (error) {
-    res.status(400).json({ error: getErrorMessage(error) });
+  } catch (error: any) {
+    let errMsg = getErrorMessage(error);
+    if (errMsg.includes('AUTH_KEY_DUPLICATED')) {
+      errMsg = 'This account is already connected! Go back to the dashboard to see it.';
+    }
+    res.status(400).json({ error: errMsg });
   }
 });
 
@@ -331,8 +335,14 @@ app.post('/api/auth/init', async (req, res) => {
       user: me.username || me.firstName || 'User',
       token: sessionToken
     });
-  } catch (error) {
-    res.status(401).json({ error: getErrorMessage(error) });
+  } catch (error: any) {
+    let errMsg = getErrorMessage(error);
+    if (errMsg.includes('AUTH_KEY_DUPLICATED')) {
+      // If it's already connected elsewhere, ignore it for initialization since it's already running.
+      console.warn('Init auth duplicate key ignored');
+      return res.status(200).json({ success: true, user: 'User (Already Active)', token: sessionToken });
+    }
+    res.status(401).json({ error: errMsg });
   }
 });
 
@@ -394,8 +404,12 @@ app.post('/api/auth/save-session', async (req, res) => {
       user: me.username || me.firstName || 'User',
       token: newToken
     });
-  } catch (error) {
-    res.status(400).json({ error: getErrorMessage(error) });
+  } catch (error: any) {
+    let errMsg = getErrorMessage(error);
+    if (errMsg.includes('AUTH_KEY_DUPLICATED')) {
+      errMsg = 'This account is already connected and active! Go back to the dashboard to see it.';
+    }
+    res.status(400).json({ error: errMsg });
   }
 });
 
