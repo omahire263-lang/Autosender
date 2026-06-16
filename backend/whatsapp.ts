@@ -120,6 +120,7 @@ function humanDelay(min: number = MIN_MSG_DELAY_MS, max: number = MAX_MSG_DELAY_
 // ─── Init WhatsApp ───────────────────────────────────────────────────────────
 let isInitializing = false;
 
+let currentQr: string | null = null;
 export async function initWhatsApp() {
     if (isInitializing) return;
     if (sock?.user) return;
@@ -140,7 +141,8 @@ export async function initWhatsApp() {
         sock.ev.on('creds.update', saveCreds);
 
         sock.ev.on('connection.update', (update) => {
-            const { connection, lastDisconnect } = update;
+            const { connection, lastDisconnect, qr } = update;
+            if (qr) currentQr = qr;
             if (connection === 'close') {
                 const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
                 if (statusCode === DisconnectReason.loggedOut) {
@@ -181,6 +183,20 @@ export async function initWhatsApp() {
 })();
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
+
+// Get latest QR code for login
+whatsappRouter.get('/auth/qr', async (req, res) => {
+    if (!sock) {
+        await initWhatsApp();
+    }
+    if (sock?.user) {
+        return res.json({ error: 'Already connected', isConnected: true });
+    }
+    if (currentQr) {
+        return res.json({ qr: currentQr });
+    }
+    res.json({ error: 'QR code not ready yet', isConnected: false });
+});
 
 // Get session string for backup
 whatsappRouter.get('/auth/session-string', async (req, res) => {

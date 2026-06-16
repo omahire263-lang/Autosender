@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import { Play, Edit3, Users, Settings, Phone, Key, LogOut, MessageCircle, X } from 'lucide-react';
+import { QRCodeCanvas } from 'qrcode.react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 axios.defaults.withCredentials = true;
@@ -85,9 +86,12 @@ function App() {
   const [waExtractedNumbers, setWaExtractedNumbers] = useState<string[]>([]);
   const [isWaExtracting, setIsWaExtracting] = useState(false);
   const [isWaLoading, setIsWaLoading] = useState(false);
-  const [waLoginMode, setWaLoginMode] = useState<'PHONE' | 'STRING'>('PHONE');
+  const [waLoginMode, setWaLoginMode] = useState<'PHONE' | 'STRING' | 'QR'>('QR');
   const [waSessionString, setWaSessionString] = useState('');
   const [isWaStringLoading, setIsWaStringLoading] = useState(false);
+  const [waQr, setWaQr] = useState<string | null>(null);
+  const [isWaQrLoading, setIsWaQrLoading] = useState(false);
+  const waQrPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchGroups = useCallback(async () => {
     setIsGroupsLoading(true);
@@ -136,10 +140,42 @@ function App() {
     try {
       const res = await axios.get<{ isConnected: boolean }>(`${API_URL}/whatsapp/status`);
       setIsWaConnected(res.data.isConnected);
+      if (res.data.isConnected && waQrPollRef.current) {
+        clearInterval(waQrPollRef.current);
+        waQrPollRef.current = null;
+        setWaQr(null);
+      }
     } catch (error) {
       console.error(error);
     }
   }, []);
+
+  const startWaQrLogin = async () => {
+    setIsWaQrLoading(true);
+    setWaQr(null);
+    // Stop any existing poll
+    if (waQrPollRef.current) clearInterval(waQrPollRef.current);
+    try {
+      // Trigger socket init on backend
+      await axios.get(`${API_URL}/whatsapp/auth/qr`);
+    } catch {}
+    // Poll every 3s for QR
+    waQrPollRef.current = setInterval(async () => {
+      try {
+        const res = await axios.get<{ qr?: string; isConnected?: boolean; error?: string }>(`${API_URL}/whatsapp/auth/qr`);
+        if (res.data.isConnected) {
+          clearInterval(waQrPollRef.current!);
+          waQrPollRef.current = null;
+          setWaQr(null);
+          setIsWaConnected(true);
+          fetchWaStatus();
+        } else if (res.data.qr) {
+          setWaQr(res.data.qr);
+        }
+      } catch {}
+    }, 3000);
+    setIsWaQrLoading(false);
+  };
 
   const initSession = useCallback(async () => {
     setIsLoading(true);
@@ -601,28 +637,50 @@ if (platform === 'NONE') {
                     <div className="text-4xl font-mono tracking-widest font-black text-green-700 bg-green-50 p-4 rounded-xl border-2 border-green-200 text-center">
                       {waCode}
                     </div>
-                    <p className="text-sm text-gray-500 mt-4 text-center">Enter this code in your WhatsApp linked devices. Waiting for connection...</p>
+                    <p className="text-sm text-gray-500 mt-4 text-center">Enter this code in WhatsApp → Linked Devices → Link with phone number. Waiting...</p>
                   </div>
                 ) : (
                   <>
-                    <div className="flex gap-2 mb-6 p-1 bg-gray-100 rounded-lg">
-                      <button
-                        onClick={() => setWaLoginMode('PHONE')}
-                        className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${waLoginMode === 'PHONE' ? 'bg-white shadow text-green-600' : 'text-gray-500 hover:text-gray-700'}`}
-                      >
+                    {/* 3-tab switcher */}
+                    <div className="flex gap-1 mb-6 p-1 bg-gray-100 rounded-lg">
+                      <button onClick={() => { setWaLoginMode('QR'); setWaQr(null); }}
+                        className={`flex-1 py-2 text-xs font-bold rounded-md transition-all ${waLoginMode === 'QR' ? 'bg-white shadow text-green-600' : 'text-gray-500 hover:text-gray-700'}`}>
+                        QR Code
+                      </button>
+                      <button onClick={() => { setWaLoginMode('PHONE'); setWaQr(null); if(waQrPollRef.current) clearInterval(waQrPollRef.current); }}
+                        className={`flex-1 py-2 text-xs font-bold rounded-md transition-all ${waLoginMode === 'PHONE' ? 'bg-white shadow text-green-600' : 'text-gray-500 hover:text-gray-700'}`}>
                         Pairing Code
                       </button>
-                      <button
-                        onClick={() => setWaLoginMode('STRING')}
-                        className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${waLoginMode === 'STRING' ? 'bg-white shadow text-green-600' : 'text-gray-500 hover:text-gray-700'}`}
-                      >
+                      <button onClick={() => { setWaLoginMode('STRING'); setWaQr(null); if(waQrPollRef.current) clearInterval(waQrPollRef.current); }}
+                        className={`flex-1 py-2 text-xs font-bold rounded-md transition-all ${waLoginMode === 'STRING' ? 'bg-white shadow text-green-600' : 'text-gray-500 hover:text-gray-700'}`}>
                         Session String
                       </button>
                     </div>
 
-                    {waLoginMode === 'PHONE' ? (
+                    {waLoginMode === 'QR' && (
+                      <div className="flex flex-col items-center">
+                        {waQr ? (
+                          <>
+                            <div className="bg-white p-4 rounded-xl border-2 border-green-200 mb-3">
+                              <QRCodeCanvas value={waQr} size={220} />
+                            </div>
+                            <p className="text-sm text-gray-500 text-center">WhatsApp खोलें → Settings → Linked Devices → Link a Device → इस QR को scan करें</p>
+                            <button onClick={startWaQrLogin} className="mt-3 text-xs text-green-600 underline">Refresh QR</button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={startWaQrLogin}
+                            disabled={isWaQrLoading}
+                            className="w-full bg-green-600 hover:bg-green-700 text-white p-4 rounded-xl font-bold transition-colors disabled:opacity-50">
+                            {isWaQrLoading ? 'Generating QR...' : '📷 Show QR Code'}
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {waLoginMode === 'PHONE' && (
                       <>
-                        <input type="text" placeholder="Phone Number (e.g. +91...)"
+                        <input type="text" placeholder="Phone Number with country code (e.g. 919876543210)"
                           value={waPhone} onChange={e => setWaPhone(e.target.value)}
                           className="w-full bg-gray-100 p-4 rounded-xl mb-4 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900 placeholder-gray-500"
                         />
@@ -633,7 +691,9 @@ if (platform === 'NONE') {
                           {isWaLoading ? 'Requesting Code...' : 'Get 8-Digit Pairing Code'}
                         </button>
                       </>
-                    ) : (
+                    )}
+
+                    {waLoginMode === 'STRING' && (
                       <>
                         <textarea
                           placeholder="Paste Session String..."
