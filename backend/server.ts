@@ -6,6 +6,7 @@ import { TelegramClient, Api } from 'telegram';
 import { StringSession } from 'telegram/sessions';
 import { FieldValue } from 'firebase-admin/firestore';
 import { initDb, getDb } from './models';
+import { whatsappRouter } from './whatsapp';
 
 dotenv.config();
 
@@ -29,6 +30,8 @@ app.use(cors({
   credentials: true 
 }));
 app.use(express.json());
+
+app.use('/api/whatsapp', whatsappRouter);
 
 // Health check endpoint for Render
 app.get('/', (req, res) => res.status(200).send('Autosender Backend is running!'));
@@ -65,6 +68,7 @@ interface AccountClient {
 let connectedClients: AccountClient[] = [];
 let pendingAuthClient: TelegramClient | null = null;
 let pendingPhone: string | null = null;
+let activeAccountIndex = 0;
 
 const getErrorMessage = (error: unknown) => {
   return error instanceof Error ? error.message : 'Unknown error';
@@ -109,8 +113,7 @@ const getActiveClient = async (req: express.Request, res: express.Response): Pro
   const token = getSessionToken(req);
   const acc = connectedClients.find(c => c.sessionToken === token);
   if (!acc) {
-    // try to fallback to first account if any
-    if (connectedClients.length > 0) return connectedClients[0].client;
+    if (connectedClients.length > 0) return connectedClients[activeAccountIndex % connectedClients.length].client;
     res.status(401).json({ error: 'Not authenticated' });
     return null;
   }
@@ -355,7 +358,14 @@ app.get('/api/telegram/groups', async (req, res) => {
 
   try {
     const dialogs = await activeClient.getDialogs({});
-    const groups = dialogs.filter(d => d.isGroup || d.isChannel);
+    const groups = dialogs.filter(d => {
+      if (d.isGroup) return true;
+      if (d.isChannel) {
+        const e = d.entity as any;
+        return e?.megagroup === true && !e?.defaultBannedRights?.viewParticipants;
+      }
+      return false;
+    });
     res.json({ groups: groups.map(g => ({ id: g.id?.toString(), title: g.title })) });
   } catch (error) {
     res.status(500).json({ error: getErrorMessage(error) });
@@ -482,10 +492,12 @@ interface CampaignState {
   dbId: string;
   message: string;
   users: any[];
+  groupNames?: string[];
   sent: number;
   failed: number;
   baseDelay: number;
   isRunning: boolean;
+  accountStats?: Record<string, number>;
 }
 let currentCampaign: CampaignState | null = null;
 let isCampaignRunning = false;
@@ -510,6 +522,7 @@ app.post('/api/campaign/start', async (req, res) => {
   const manualDelaySeconds = Number(req.body.manualDelaySeconds);
   const isManual = req.body.manualDelaySeconds !== undefined;
   const skipCount = Math.max(0, Number(req.body.skipCount) || 0);
+  const groupNames: string[] = Array.isArray(req.body.groupNames) ? req.body.groupNames : [];
 
   if (!messageText) return res.status(400).json({ error: 'Message is required' });
   if (users.length === 0) return res.status(400).json({ error: 'Users are required' });
@@ -537,6 +550,8 @@ app.post('/api/campaign/start', async (req, res) => {
       totalUsers,
       estimatedTime: totalTimeSeconds,
       remainingUsers: JSON.stringify(usersToSend),
+      groupNames: JSON.stringify(groupNames),
+      accountStats: {},
       baseDelay,
       createdAt: FieldValue.serverTimestamp(),
       sentCount: skipCount,
@@ -547,19 +562,21 @@ app.post('/api/campaign/start', async (req, res) => {
       dbId: campaignRef.id,
       message: messageText,
       users: usersToSend,
+      groupNames,
       sent: skipCount,
       failed: 0,
       baseDelay,
-      isRunning: true
+      isRunning: true,
+      accountStats: {}
     };
     
     isCampaignRunning = true;
     res.json({ success: true, campaignId: campaignRef.id });
-runCampaign();
-    } catch (error) {
-      res.status(500).json({ error: getErrorMessage(error) });
-    }
-  });
+    runCampaign();
+  } catch (error) {
+    res.status(500).json({ error: getErrorMessage(error) });
+  }
+});
 
   // Pause the current campaign (allow resume later)
   app.post('/api/campaign/pause-all', async (req, res) => {
@@ -598,8 +615,15 @@ app.post('/api/campaign/stop-all', async (req, res) => {
 
 app.get('/api/campaign/status', async (req, res) => {
   const db = getDb();
-  const snap = await db.collection('campaigns').where('status', '==', 'Sending').get();
-  const active = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  const snap = await db.collection('campaigns').where('status', 'in', ['Sending', 'Paused (Flood)']).get();
+  const active = snap.docs.map(doc => {
+    const data = doc.data();
+    let groupNames = [];
+    if (data.groupNames) {
+      try { groupNames = JSON.parse(data.groupNames); } catch(e) {}
+    }
+    return { id: doc.id, ...data, groupNames };
+  });
 
   if (active.length === 0 && isCampaignRunning) {
     isCampaignRunning = false;
@@ -688,9 +712,8 @@ function antiBanSpin(text: string): string {
 }
 
 async function runCampaign() {
-  const activeClient = connectedClients.length > 0 ? connectedClients[0].client : null;
-  if (!activeClient || !currentCampaign) {
-    console.log('runCampaign: No client or campaign', { hasClient: !!activeClient, hasCampaign: !!currentCampaign });
+  if (connectedClients.length === 0 || !currentCampaign) {
+    console.log('runCampaign: No client or campaign', { hasClient: connectedClients.length > 0, hasCampaign: !!currentCampaign });
     return;
   }
 
@@ -698,8 +721,14 @@ async function runCampaign() {
   const db = getDb();
 
   while (isCampaignRunning && campaign.isRunning && campaign.users.length > 0) {
-    const userObj = campaign.users.shift();
-    if (!userObj) continue;
+    let activeClientWrapper = connectedClients[activeAccountIndex % connectedClients.length];
+    let activeClient = activeClientWrapper.client;
+
+    const userObj = campaign.users[0]; // peek
+    if (!userObj) {
+      campaign.users.shift();
+      continue;
+    }
     const userIdStr = typeof userObj === 'object' ? userObj.id : userObj;
 
     let attempts = 0;
@@ -729,11 +758,18 @@ async function runCampaign() {
         await activeClient.sendMessage(peer, { message: uniqueMessage });
         sent = true;
         campaign.sent++;
-        console.log(`Sent successfully. Total sent: ${campaign.sent}`);
+        
+        const phoneKey = activeClientWrapper.phoneNumber || 'Unknown';
+        campaign.accountStats = campaign.accountStats || {};
+        campaign.accountStats[phoneKey] = (campaign.accountStats[phoneKey] || 0) + 1;
+
+        activeClientWrapper.messagesSent = (activeClientWrapper.messagesSent || 0) + 1;
+        console.log(`Sent successfully from ${activeClientWrapper.phoneNumber}. Total sent: ${campaign.sent}`);
         await db.collection('sent_users').doc(userIdStr).set({ 
           userId: userIdStr, 
           sentAt: FieldValue.serverTimestamp() 
         }, { merge: true });
+        campaign.users.shift(); // remove after success
       } catch (error: any) {
         const errMsg = error?.message || String(error);
         console.error('Failed to send to', userIdStr, errMsg);
@@ -750,13 +786,28 @@ async function runCampaign() {
           continue;
         }
         // For PEER_FLOOD or any other error, retry exactly once
-        if (attempts < 1) {
+        if (attempts < 1 && !isPeerFlood) {
           console.log(`Error detected (${isPeerFlood ? 'PEER_FLOOD' : 'General'}), retrying 1 more time for ${userIdStr}...`);
           await sleep(5000);
           attempts++;
           continue;
         }
+
+        if (isPeerFlood) {
+          console.log(`PEER_FLOOD on account ${activeClientWrapper.phoneNumber}. Switching to next account...`);
+          activeAccountIndex++;
+          const loopedBack = (activeAccountIndex % connectedClients.length) === 0;
+          if (loopedBack) {
+            console.log("All accounts restricted. Pausing campaign for 1 hour...");
+            try { await db.collection('campaigns').doc(campaign.dbId).update({ status: 'Paused (Flood)' }); } catch(e) {}
+            await sleep(3600 * 1000); // 1 hour pause
+            console.log("Resuming campaign after 1 hour pause.");
+            try { await db.collection('campaigns').doc(campaign.dbId).update({ status: 'Sending' }); } catch(e) {}
+          }
+          continue; // retry the same user, since we didn't shift it
+        }
         
+        campaign.users.shift(); // remove after failure
         campaign.failed++;
         try { await db.collection('campaigns').doc(campaign.dbId).update({ lastError: errMsg }); } catch(e) {}
         break;
@@ -767,7 +818,8 @@ async function runCampaign() {
       const updateData: any = {
         sentCount: campaign.sent,
         failedCount: campaign.failed,
-        remainingUsers: JSON.stringify(campaign.users)
+        remainingUsers: JSON.stringify(campaign.users),
+        accountStats: campaign.accountStats
       };
       if (campaign.users.length === 0) {
         updateData.status = 'Completed';
@@ -792,6 +844,28 @@ async function runCampaign() {
   currentCampaign = null;
 }
 
+app.get('/api/accounts', (req, res) => {
+  res.json({
+    accounts: connectedClients.map((c, i) => ({
+      phone: c.phoneNumber,
+      messagesSent: c.messagesSent || 0,
+      isActive: i === (activeAccountIndex % Math.max(1, connectedClients.length))
+    })),
+    total: connectedClients.length
+  });
+});
+
+app.post('/api/accounts/switch', (req, res) => {
+  const phone = req.body.phone;
+  const index = connectedClients.findIndex(c => c.phoneNumber === phone);
+  if (index !== -1) {
+    activeAccountIndex = index;
+    res.json({ success: true, activeAccountIndex });
+  } else {
+    res.status(400).json({ error: 'Account not found' });
+  }
+});
+
 async function resumeCampaigns() {
   if (isCampaignRunning) return;
   const db = getDb();
@@ -811,7 +885,8 @@ async function resumeCampaigns() {
               sent: activeDbCampaign.sentCount || 0,
               failed: activeDbCampaign.failedCount || 0,
               baseDelay: activeDbCampaign.baseDelay || ((activeDbCampaign.estimatedTime || 3600) / (activeDbCampaign.totalUsers || 1)),
-              isRunning: true
+              isRunning: true,
+              accountStats: activeDbCampaign.accountStats || {}
           };
           isCampaignRunning = true;
           console.log('Resuming campaign from DB', currentCampaign.dbId);

@@ -27,6 +27,14 @@ type CampaignStatus = {
   estimatedTime?: number;
   createdAt?: string;
   lastError?: string;
+  groupNames?: string[];
+  accountStats?: Record<string, number>;
+};
+
+type Account = {
+  phone: string;
+  messagesSent: number;
+  isActive: boolean;
 };
 
 const getErrorMessage = (error: unknown, fallback: string) => {
@@ -61,12 +69,22 @@ function App() {
   const [skipCount, setSkipCount] = useState<string | number>(0);
   const [campaignStatus, setCampaignStatus] = useState<CampaignStatus | null>(null);
   const [isRunning, setIsRunning] = useState(false);
+  const [accounts, setAccounts] = useState<Account[]>([]);
 
 
   const [isGroupsLoading, setIsGroupsLoading] = useState(false);
   const [memberStats, setMemberStats] = useState<MemberStats | null>(null);
   const [activeFilter, setActiveFilter] = useState<'all' | 'activeToday' | 'activeWeek' | 'active' | 'unknown'>('all');
   const [allExtractedMembers, setAllExtractedMembers] = useState<Member[]>([]);
+
+  // WhatsApp States
+  const [waPhone, setWaPhone] = useState('');
+  const [waCode, setWaCode] = useState('');
+  const [isWaConnected, setIsWaConnected] = useState(false);
+  const [waGroups, setWaGroups] = useState<{id: string, subject: string}[]>([]);
+  const [waSelectedGroup, setWaSelectedGroup] = useState('');
+  const [waContactsStr, setWaContactsStr] = useState('');
+  const [waMessage, setWaMessage] = useState('Hello from WhatsApp Automation!');
 
   const fetchGroups = useCallback(async () => {
     setIsGroupsLoading(true);
@@ -92,6 +110,37 @@ function App() {
     }
   }, []);
 
+  const fetchAccounts = useCallback(async () => {
+    try {
+      const res = await axios.get<{ accounts: Account[]; total: number }>(`${API_URL}/accounts`);
+      setAccounts(res.data.accounts);
+    } catch (error) {
+      console.error(error);
+    }
+  }, []);
+
+  const switchAccount = async (phone: string) => {
+    try {
+      await axios.post(`${API_URL}/accounts/switch`, { phone });
+      await fetchAccounts();
+    } catch (error) {
+      alert('Failed to switch account');
+    }
+  };
+
+
+  const fetchWaStatus = useCallback(async () => {
+    try {
+      const res = await axios.get<{ isConnected: boolean }>(`${API_URL}/whatsapp/status`);
+      setIsWaConnected(res.data.isConnected);
+      if (res.data.isConnected) {
+        const grpRes = await axios.get<{ groups: any[] }>(`${API_URL}/whatsapp/groups`);
+        setWaGroups(grpRes.data.groups);
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  }, []);
 
   const initSession = useCallback(async () => {
     setIsLoading(true);
@@ -105,12 +154,14 @@ function App() {
       setStep('DASHBOARD');
       await fetchGroups();
       await fetchStatus();
+      await fetchAccounts();
+      await fetchWaStatus();
     } catch {
       setStep('PHONE');
     } finally {
       setIsLoading(false);
     }
-  }, [fetchGroups, fetchStatus]);
+  }, [fetchGroups, fetchStatus, fetchAccounts, fetchWaStatus]);
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
@@ -123,9 +174,12 @@ function App() {
   useEffect(() => {
     if (!isRunning) return;
 
-    const interval = setInterval(fetchStatus, 2000);
+    const interval = setInterval(() => {
+      fetchStatus();
+      fetchAccounts();
+    }, 2000);
     return () => clearInterval(interval);
-  }, [fetchStatus, isRunning]);
+  }, [fetchStatus, fetchAccounts, isRunning]);
 
   useEffect(() => {
     const handlePopState = () => {
@@ -293,16 +347,17 @@ function App() {
     try {
       const skip = Math.max(0, Number(skipCount) || 0);
       const users = members.filter(member => member.id).map(member => ({ id: member.id, accessHash: member.accessHash, username: member.username }));
+      const selectedGroupNames = selectedGroups.map(id => groups.find(g => g.id === id)?.title).filter(Boolean);
 
       if (useManualDelay) {
         const delaySeconds = Number(manualDelay);
         if (!delaySeconds || delaySeconds <= 0) return alert('Please enter a valid delay in seconds');
-        await axios.post(`${API_URL}/campaign/start`, { message, users, manualDelaySeconds: delaySeconds, skipCount: skip });
+        await axios.post(`${API_URL}/campaign/start`, { message, users, groupNames: selectedGroupNames, manualDelaySeconds: delaySeconds, skipCount: skip });
       } else {
         const val = Number(durationValue) || 0;
         const totalTimeHours = durationType === 'minutes' ? val / 60 : val;
         if (totalTimeHours <= 0) return alert('Please enter a valid duration greater than 0');
-        await axios.post(`${API_URL}/campaign/start`, { message, users, totalTimeHours, skipCount: skip });
+        await axios.post(`${API_URL}/campaign/start`, { message, users, groupNames: selectedGroupNames, totalTimeHours, skipCount: skip });
       }
 
       setIsRunning(true);
@@ -324,7 +379,47 @@ function App() {
     }
   };
 
+  const handleWaPair = async () => {
+    try {
+      const res = await axios.post<{ code: string }>(`${API_URL}/whatsapp/auth/pair`, { phone: waPhone });
+      setWaCode(res.data.code);
+      
+      const interval = setInterval(async () => {
+        try {
+          const st = await axios.get(`${API_URL}/whatsapp/status`);
+          if (st.data.isConnected) {
+            clearInterval(interval);
+            setStep('DASHBOARD');
+            await fetchWaStatus();
+          }
+        } catch(e){}
+      }, 5000);
+    } catch (error) {
+      alert(`Failed to get pairing code: ${getErrorMessage(error, 'Error')}`);
+    }
+  };
 
+  const startWaCampaign = async () => {
+    const contacts = waContactsStr.split(/[\n,]+/).map(c => c.trim()).filter(c => c);
+    if (!contacts.length) return alert('No contacts found');
+    try {
+      await axios.post(`${API_URL}/whatsapp/campaign/start`, { contacts, message: waMessage });
+      alert('WhatsApp Campaign started!');
+    } catch (error) {
+      alert(getErrorMessage(error, 'Failed'));
+    }
+  };
+
+  const addWaGroupMembers = async () => {
+    const contacts = waContactsStr.split(/[\n,]+/).map(c => c.trim()).filter(c => c);
+    if (!contacts.length || !waSelectedGroup) return alert('Select group and enter contacts');
+    try {
+      await axios.post(`${API_URL}/whatsapp/groups/add`, { groupId: waSelectedGroup, contacts });
+      alert('Members added to WhatsApp group successfully!');
+    } catch (error) {
+      alert(getErrorMessage(error, 'Failed to add members'));
+    }
+  };
 
   const updateMessage = async () => {
     try {
@@ -397,22 +492,94 @@ if (platform === 'NONE') {
   }
 
   if (platform === 'WHATSAPP') {
+    if (step === 'DASHBOARD' && isWaConnected) {
+      return (
+        <div className="min-h-screen bg-gray-100 text-gray-900 p-4 md:p-8">
+          <div className="max-w-4xl mx-auto space-y-6">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              <h1 className="text-3xl sm:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-green-500 to-green-700 flex items-center gap-3">
+                <MessageCircle className="text-green-500" size={32} /> WhatsApp Sender
+              </h1>
+              <button onClick={() => { setStep('PHONE'); setPlatform('NONE'); }} className="flex items-center gap-2 bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-lg font-semibold transition-colors">
+                Back Home
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col">
+                <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-gray-900"><Users className="text-green-500" /> Contacts & Groups</h2>
+                
+                <label className="block text-sm text-gray-600 mb-2 font-medium">Paste Numbers (one per line or comma-separated):</label>
+                <textarea
+                  value={waContactsStr} onChange={e => setWaContactsStr(e.target.value)}
+                  className="w-full h-32 bg-gray-100 border border-gray-300 text-gray-900 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 mb-4 resize-none text-sm"
+                  placeholder="+919876543210&#10;+1234567890"></textarea>
+
+                <label className="block text-sm text-gray-600 mb-2 font-medium">Select Admin Group (For adding members):</label>
+                <select 
+                  value={waSelectedGroup} onChange={e => setWaSelectedGroup(e.target.value)}
+                  className="w-full bg-gray-100 border border-gray-300 text-gray-900 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 mb-4"
+                >
+                  <option value="">-- Select Group --</option>
+                  {waGroups.map(g => (
+                    <option key={g.id} value={g.id}>{g.subject}</option>
+                  ))}
+                </select>
+
+                <button onClick={addWaGroupMembers} className="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-lg font-bold transition-colors shadow-sm">
+                  Add Contacts to Group
+                </button>
+              </div>
+
+              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col">
+                <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-gray-900"><Edit3 className="text-green-500" /> Message Campaign</h2>
+                
+                <textarea
+                  value={waMessage} onChange={e => setWaMessage(e.target.value)}
+                  className="w-full h-32 bg-gray-100 border border-gray-300 text-gray-900 p-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 mb-4 resize-none"
+                  placeholder="Type your WhatsApp message..."></textarea>
+
+                <button onClick={startWaCampaign} className="w-full flex items-center justify-center gap-2 bg-green-600 text-white hover:bg-green-700 px-8 py-3 rounded-xl font-bold text-lg transition-all shadow-md">
+                  <Play fill="currentColor" /> Send Message to Contacts
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen flex items-center justify-center bg-white text-gray-900 p-4">
         <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-green-300 text-center">
           <div className="flex justify-center mb-6"><MessageCircle size={56} className="text-green-600" /></div>
           <h2 className="text-2xl font-bold mb-3">WhatsApp Automation</h2>
-          <p className="text-gray-600 mb-8 text-sm px-2">
-            Enter your phone number to receive an 8-digit linking code on your WhatsApp app. No QR scan needed!
-          </p>
-          <input type="text" placeholder="Phone Number (e.g. +91...)"
-            className="w-full bg-gray-100 p-4 rounded-xl mb-4 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900 placeholder-gray-500"
-          />
-          <button className="w-full bg-green-600 text-white hover:bg-green-700 p-4 rounded-xl font-bold transition-colors">
-            Get 8-Digit Pairing Code
-          </button>
+          {waCode ? (
+            <div className="mb-6">
+              <p className="text-gray-600 mb-4">Your Pairing Code:</p>
+              <div className="text-4xl font-mono tracking-widest font-black text-green-700 bg-green-50 p-4 rounded-xl border-2 border-green-200">
+                {waCode}
+              </div>
+              <p className="text-sm text-gray-500 mt-4">Enter this code in your WhatsApp linked devices. Waiting for connection...</p>
+            </div>
+          ) : (
+            <>
+              <p className="text-gray-600 mb-8 text-sm px-2">
+                Enter your phone number to receive an 8-digit linking code on your WhatsApp app. No QR scan needed!
+              </p>
+              <input type="text" placeholder="Phone Number (e.g. +91...)"
+                value={waPhone} onChange={e => setWaPhone(e.target.value)}
+                className="w-full bg-gray-100 p-4 rounded-xl mb-4 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900 placeholder-gray-500"
+              />
+              <button 
+                onClick={handleWaPair}
+                className="w-full bg-green-600 text-white hover:bg-green-700 p-4 rounded-xl font-bold transition-colors">
+                Get 8-Digit Pairing Code
+              </button>
+            </>
+          )}
           
-          <button onClick={() => setPlatform('NONE')} className="mt-6 text-gray-500 hover:text-gray-700 underline text-sm transition-colors">
+          <button onClick={() => { setPlatform('NONE'); setWaCode(''); }} className="mt-6 text-gray-500 hover:text-gray-700 underline text-sm transition-colors">
             Go Back to Selection
           </button>
         </div>
@@ -535,14 +702,33 @@ return (
         </div>
 
         {dashboardUser && (
-          <div className="flex flex-col sm:flex-row items-center justify-between bg-white p-4 rounded-lg border border-gray-200">
-            <p className="text-gray-500 text-center sm:text-left mb-4 sm:mb-0">Logged in as: <span className="text-gray-900 font-semibold">{dashboardUser}</span></p>
-            {loggedInSessionString && (
-              <div className="flex items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0">
-                <input type="password" readOnly value={loggedInSessionString} className="bg-gray-100 border border-gray-300 rounded p-2 text-sm text-gray-500 w-full sm:w-48 font-mono outline-none" placeholder="Session String" />
-                <button onClick={() => { navigator.clipboard.writeText(loggedInSessionString); alert('Copied to clipboard!'); }} className="bg-purple-600 text-white px-3 py-2 rounded text-sm font-semibold hover:bg-purple-700 transition-colors whitespace-nowrap flex items-center gap-1">
-                  <Key size={14}/> Copy Session
-                </button>
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col sm:flex-row items-center justify-between bg-white p-4 rounded-lg border border-gray-200">
+              <p className="text-gray-500 text-center sm:text-left mb-4 sm:mb-0">Logged in as: <span className="text-gray-900 font-semibold">{dashboardUser}</span></p>
+              {loggedInSessionString && (
+                <div className="flex items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0">
+                  <input type="password" readOnly value={loggedInSessionString} className="bg-gray-100 border border-gray-300 rounded p-2 text-sm text-gray-500 w-full sm:w-48 font-mono outline-none" placeholder="Session String" />
+                  <button onClick={() => { navigator.clipboard.writeText(loggedInSessionString); alert('Copied to clipboard!'); }} className="bg-purple-600 text-white px-3 py-2 rounded text-sm font-semibold hover:bg-purple-700 transition-colors whitespace-nowrap flex items-center gap-1">
+                    <Key size={14}/> Copy Session
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {accounts.length > 0 && (
+              <div className="flex flex-col sm:flex-row items-center justify-between bg-white p-4 rounded-lg border border-gray-200">
+                <p className="text-gray-500 font-semibold shrink-0">Accounts ({accounts.length}):</p>
+                <div className="flex gap-2 flex-wrap mt-2 sm:mt-0 sm:ml-4 overflow-x-auto pb-1">
+                  {accounts.map(acc => (
+                    <button
+                      key={acc.phone}
+                      onClick={() => switchAccount(acc.phone)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 ${acc.isActive ? 'bg-green-100 text-green-800 border-2 border-green-400 shadow-sm' : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'}`}
+                    >
+                      {acc.phone} <span className="opacity-75 font-normal ml-1">(Sent: {acc.messagesSent})</span>
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -703,12 +889,34 @@ return (
            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm md:col-span-2 flex flex-col md:flex-row items-center justify-between gap-6">
               <div className="text-center md:text-left">
                 <h2 className="text-2xl font-bold mb-2 text-gray-900">Campaign Status</h2>
-                {campaignStatus ? (
+                 {campaignStatus ? (
                   <div>
-                    <p className="text-green-600 font-bold mb-2">Campaign Running</p>
-                    <div className="text-sm bg-gray-50 p-2 rounded border border-gray-200 mb-2">
-                       <p className="font-semibold truncate w-48 sm:w-64">{campaignStatus.message}</p>
+                    <p className={`font-bold mb-2 ${campaignStatus.status?.includes('Paused') ? 'text-orange-500' : 'text-green-600'}`}>
+                      {campaignStatus.status?.includes('Paused') ? 'Campaign Paused (Flood Restrict)' : 'Campaign Running'}
+                    </p>
+                    <div className="text-sm bg-gray-50 p-3 rounded border border-gray-200 mb-2">
+                       {campaignStatus.groupNames && campaignStatus.groupNames.length > 0 && (
+                         <div className="mb-2 pb-2 border-b border-gray-200">
+                           <p className="font-semibold text-blue-700 text-xs uppercase tracking-wider mb-1">Target Groups ({campaignStatus.groupNames.length}):</p>
+                           <p className="text-gray-700 font-medium text-xs truncate w-48 sm:w-64">{campaignStatus.groupNames.join(', ')}</p>
+                         </div>
+                       )}
+                       <p className="font-semibold truncate w-48 sm:w-64 mb-1">{campaignStatus.message}</p>
                        <p className="text-gray-600">Sent: {campaignStatus.sentCount || 0} / {campaignStatus.totalUsers || 0} | Failed: <span className="text-red-500 font-bold">{campaignStatus.failedCount || 0}</span></p>
+                       
+                       {campaignStatus.accountStats && Object.keys(campaignStatus.accountStats).length > 0 && (
+                         <div className="mt-2 bg-white border border-gray-200 p-2 rounded text-xs">
+                           <span className="font-bold text-gray-700 block mb-1">Sent by Account (This Campaign):</span>
+                           <div className="flex flex-wrap gap-2">
+                             {Object.entries(campaignStatus.accountStats).map(([phone, count]) => (
+                               <div key={phone} className="bg-gray-100 px-2 py-1 rounded text-gray-600">
+                                 {phone}: <span className="font-semibold text-green-700">{count}</span>
+                               </div>
+                             ))}
+                           </div>
+                         </div>
+                       )}
+
                        {campaignStatus.lastError && (
                          <div className="mt-2 bg-red-100 border border-red-300 p-2 rounded text-xs text-red-700">
                            <span className="font-bold">Error:</span> {campaignStatus.lastError}
@@ -720,9 +928,11 @@ return (
               </div>
 
               <div className="flex flex-col gap-4 w-full md:w-auto">
-                <button onClick={startCampaign} className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white hover:bg-blue-700 px-8 py-3 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-[0_4px_14px_0_rgba(37,99,235,0.39)]">
-                  <Play fill="currentColor" /> Start Sender
-                </button>
+                {!isRunning && (
+                  <button onClick={startCampaign} className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white hover:bg-blue-700 px-8 py-3 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-[0_4px_14px_0_rgba(37,99,235,0.39)]">
+                    <Play fill="currentColor" /> Start Sender
+                  </button>
+                )}
                 {campaignStatus && isRunning && (
                   <div className="flex gap-2">
                     <button onClick={closeAllCampaigns} className="w-full flex items-center justify-center gap-2 bg-gray-800 text-white hover:bg-gray-900 px-6 py-3 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-[0_4px_14px_0_rgba(31,41,55,0.39)]">
