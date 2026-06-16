@@ -109,7 +109,7 @@ whatsappRouter.get('/groups', async (req, res) => {
         const groups = Object.values(chats).map(g => {
             const isAdmin = g.participants.some(p => p.id === myJid && (p.admin === 'admin' || p.admin === 'superadmin'));
             return { id: g.id, subject: g.subject, isAdmin };
-        }).filter(g => g.isAdmin);
+        });
         
         res.json({ groups });
     } catch (e: any) {
