@@ -840,16 +840,28 @@ return (
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col" style={{minHeight: '420px'}}>
-            <div className="flex items-center justify-between mb-4 shrink-0">
+            <div className="flex items-center justify-between mb-2 shrink-0">
               <h2 className="text-xl font-bold flex items-center gap-2 text-gray-900"><Users className="text-blue-400" /> Target Audience</h2>
               <button onClick={fetchGroups} className="text-sm bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded text-gray-600 font-medium">
                 {isGroupsLoading ? 'Loading...' : 'Refresh'}
               </button>
             </div>
 
-            <div className="overflow-y-auto bg-gray-100 rounded p-3 mb-4 space-y-2 border border-gray-300" style={{height: '200px'}}>
+            {groups.length > 0 && (
+              <div className="flex items-center justify-between mb-2 shrink-0">
+                <span className="text-xs text-gray-500">{selectedGroups.length}/{groups.length} selected</span>
+                <button
+                  onClick={() => selectedGroups.length === groups.length ? setSelectedGroups([]) : setSelectedGroups(groups.map(g => g.id))}
+                  className="text-xs font-bold text-blue-600 hover:text-blue-800 px-2 py-1 bg-blue-50 hover:bg-blue-100 rounded transition-colors"
+                >
+                  {selectedGroups.length === groups.length ? '☑ Deselect All' : '☐ Select All'}
+                </button>
+              </div>
+            )}
+
+            <div className="overflow-y-auto bg-gray-100 rounded p-3 mb-3 space-y-2 border border-gray-300" style={{height: '185px'}}>
               {isGroupsLoading ? (
-                <p className="text-gray-500 text-sm text-center py-4">Fetching groups from Telegram...</p>
+                <p className="text-gray-500 text-sm text-center py-4">Fetching groups from all accounts...</p>
               ) : groups.length === 0 ? (
                 <p className="text-gray-500 text-sm text-center py-4">No groups found.</p>
               ) : (
@@ -867,8 +879,8 @@ return (
               )}
             </div>
 
-            <button onClick={extractMembers} disabled={isGroupsLoading} className="w-full shrink-0 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 p-3 rounded text-gray-800 font-semibold transition-colors">
-              Extract Members
+            <button onClick={extractMembers} disabled={isGroupsLoading || selectedGroups.length === 0} className="w-full shrink-0 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 p-3 rounded text-gray-800 font-semibold transition-colors">
+              Extract Members {selectedGroups.length > 0 ? `(${selectedGroups.length} groups)` : ''}
             </button>
             {memberStats && (
               <div className="mt-3">

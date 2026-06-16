@@ -400,22 +400,30 @@ app.post('/api/auth/save-session', async (req, res) => {
 });
 
 app.get('/api/telegram/groups', async (req, res) => {
-  const activeClient = await getActiveClient(req, res);
-  if (!activeClient) return;
+  if (connectedClients.length === 0) return res.status(401).json({ error: 'No accounts connected' });
 
   try {
-    const dialogs = await activeClient.getDialogs({});
-    // Show ALL groups and supergroups - let extraction fail naturally for restricted ones
-    const groups = dialogs.filter(d => {
-      if (d.isGroup) return true;
-      if (d.isChannel) {
-        const e = d.entity as any;
-        // Include all megagroups (supergroups), regardless of viewParticipants setting
-        return e?.megagroup === true;
+    const allGroupsMap = new Map<string, { id: string; title: string }>();
+
+    // Fetch groups from ALL connected accounts
+    for (const clientWrapper of connectedClients) {
+      try {
+        const dialogs = await clientWrapper.client.getDialogs({});
+        for (const d of dialogs) {
+          if (d.isGroup || (d.isChannel && (d.entity as any)?.megagroup === true)) {
+            const id = d.id?.toString();
+            if (id && !allGroupsMap.has(id)) {
+              allGroupsMap.set(id, { id, title: d.title || '' });
+            }
+          }
+        }
+      } catch (e) {
+        console.warn(`Could not fetch groups for ${clientWrapper.phoneNumber}:`, e);
       }
-      return false;
-    });
-    res.json({ groups: groups.map(g => ({ id: g.id?.toString(), title: g.title })) });
+    }
+
+    const groups = Array.from(allGroupsMap.values());
+    res.json({ groups });
   } catch (error) {
     res.status(500).json({ error: getErrorMessage(error) });
   }
@@ -438,10 +446,12 @@ app.post('/api/telegram/members', async (req, res) => {
       return res.status(400).json({ error: 'Select at least one group' });
     }
 
-    let allMembers: Array<{ id: string; username?: string; firstName?: string; status: string; isBot: boolean; isDeleted: boolean }> = [];
+    let allMembers: Array<{ id: string; username?: string; firstName?: string; status: string; isBot: boolean; isDeleted: boolean; accessHash?: string }> = [];
+    const skippedGroups: string[] = [];
 
     for (const id of ids) {
-      const participants = await activeClient.getParticipants(id, { limit: 5000 });
+      try {
+        const participants = await activeClient.getParticipants(id, { limit: 5000 });
       const members = participants.map((p: any) => {
         const statusClass = p.status?.className || '';
         let status = 'unknown';
@@ -464,7 +474,11 @@ app.post('/api/telegram/members', async (req, res) => {
         };
       }).filter((member: any) => member.id.length > 0);
 
-      allMembers = [...allMembers, ...members];
+        allMembers = [...allMembers, ...members];
+      } catch (e: any) {
+        console.warn(`Skipping group ${id}: ${e.message}`);
+        skippedGroups.push(id);
+      }
     }
 
     const uniqueMembers = Array.from(new Map(allMembers.map(item => [item.id, item])).values());
@@ -501,7 +515,7 @@ app.post('/api/telegram/members', async (req, res) => {
       await batch.commit().catch(() => {});
     }
 
-res.json({ members: finalMembers, stats });
+    res.json({ members: uniqueMembers, stats, skippedGroups });
     } catch (error) {
       res.status(500).json({ error: getErrorMessage(error) });
     }
@@ -844,20 +858,15 @@ async function runCampaign() {
 
         if (isPeerFlood) {
           console.log(`PEER_FLOOD on account ${activeClientWrapper.phoneNumber}. Switching to next account...`);
-          const prevIndex = activeAccountIndex;
           activeAccountIndex++;
-          // Only pause if we've cycled through ALL accounts and all had PEER_FLOOD
-          const triedAll = (activeAccountIndex - prevIndex) >= connectedClients.length ||
-                           activeAccountIndex >= connectedClients.length;
-          if (triedAll && connectedClients.every((_, i) => {
-            // check if we've been through all accounts
-            return activeAccountIndex >= connectedClients.length;
-          })) {
-            console.log("All accounts restricted. Pausing campaign for 1 hour...");
-            activeAccountIndex = 0; // reset
-            try { await db.collection('campaigns').doc(campaign.dbId).update({ status: 'Paused (Flood)' }); } catch(e) {}
-            await sleep(3600 * 1000); // 1 hour pause
-            console.log("Resuming campaign after 1 hour pause.");
+          
+          // If we've cycled through ALL accounts, pause for 1 hour
+          if (activeAccountIndex >= connectedClients.length) {
+            activeAccountIndex = 0;
+            console.log('All accounts have PEER_FLOOD. Pausing campaign for 1 hour...');
+            try { await db.collection('campaigns').doc(campaign.dbId).update({ status: 'Paused (Flood - All accounts restricted)' }); } catch(e) {}
+            await sleep(3600 * 1000);
+            console.log('Resuming campaign after 1 hour pause.');
             try { await db.collection('campaigns').doc(campaign.dbId).update({ status: 'Sending' }); } catch(e) {}
           }
           continue; // retry the same user on next account
