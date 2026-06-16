@@ -230,10 +230,11 @@ whatsappRouter.post('/auth/pair', async (req, res) => {
     const sendError = (msg: string) => res.status(500).json({ error: msg });
 
     try {
-        if (sock) {
-            try { await sock.logout(); } catch {}
-            sock = null;
+        const existingSock = sock;
+        if (existingSock) {
+            try { await existingSock.logout(); } catch {}
         }
+        sock = null;
 
         const db = getDb();
         await db.collection('whatsapp_sessions').doc(WA_SESSION_DOC).delete().catch(() => {});
@@ -249,7 +250,7 @@ whatsappRouter.post('/auth/pair', async (req, res) => {
             try {
                 await delay(6000);
 
-                const currentSock = sock;
+                const currentSock = sock as ReturnType<typeof makeWASocket> | null;
                 if (!currentSock) {
                     if (attempts < maxAttempts) {
                         console.log(`Pairing attempt ${attempts}: socket not ready, retrying...`);
