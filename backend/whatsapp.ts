@@ -132,7 +132,9 @@ export async function initWhatsApp() {
             auth: state,
             printQRInTerminal: false,
             logger,
-            browser: ['Windows', 'Chrome', '10.0']
+            browser: ['Ubuntu', 'Chrome', '20.0.04'],
+            syncFullHistory: false,
+            markOnlineOnConnect: false
         });
 
         sock.ev.on('creds.update', saveCreds);
