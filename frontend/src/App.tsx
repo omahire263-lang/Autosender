@@ -85,6 +85,7 @@ function App() {
   const [waSelectedGroup, setWaSelectedGroup] = useState('');
   const [waContactsStr, setWaContactsStr] = useState('');
   const [waMessage, setWaMessage] = useState('Hello from WhatsApp Automation!');
+  const [isWaLoading, setIsWaLoading] = useState(false);
 
   const fetchGroups = useCallback(async () => {
     setIsGroupsLoading(true);
@@ -380,8 +381,15 @@ function App() {
   };
 
   const handleWaPair = async () => {
+    if (!waPhone) return alert('Enter phone number');
+    setIsWaLoading(true);
     try {
-      const res = await axios.post<{ code: string }>(`${API_URL}/whatsapp/auth/pair`, { phone: waPhone });
+      const trimmedPhone = waPhone.trim();
+      const formattedPhone = trimmedPhone.startsWith('+')
+        ? trimmedPhone
+        : `+91${trimmedPhone.replace(/^0+/, '')}`;
+
+      const res = await axios.post<{ code: string }>(`${API_URL}/whatsapp/auth/pair`, { phone: formattedPhone });
       setWaCode(res.data.code);
       
       const interval = setInterval(async () => {
@@ -396,6 +404,8 @@ function App() {
       }, 5000);
     } catch (error) {
       alert(`Failed to get pairing code: ${getErrorMessage(error, 'Error')}`);
+    } finally {
+      setIsWaLoading(false);
     }
   };
 
@@ -573,8 +583,9 @@ if (platform === 'NONE') {
               />
               <button 
                 onClick={handleWaPair}
-                className="w-full bg-green-600 text-white hover:bg-green-700 p-4 rounded-xl font-bold transition-colors">
-                Get 8-Digit Pairing Code
+                disabled={isWaLoading}
+                className="w-full bg-green-600 text-white hover:bg-green-700 p-4 rounded-xl font-bold transition-colors disabled:opacity-50">
+                {isWaLoading ? 'Requesting Code...' : 'Get 8-Digit Pairing Code'}
               </button>
             </>
           )}
