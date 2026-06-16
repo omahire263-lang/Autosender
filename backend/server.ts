@@ -657,7 +657,7 @@ app.post('/api/campaign/update-delay', async (req, res) => {
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
-function antiBanSpin(text: string): string {
+export function antiBanSpin(text: string): string {
   const homoglyphs: Record<string, string[]> = {
       'a': ['а'], 'c': ['с'], 'e': ['е'], 'o': ['о'], 
       'p': ['р'], 'x': ['х'], 'y': ['у'], 'i': ['і']

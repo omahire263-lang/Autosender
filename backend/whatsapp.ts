@@ -3,6 +3,7 @@ import pino from 'pino';
 import express from 'express';
 import { Boom } from '@hapi/boom';
 import fs from 'fs';
+import { antiBanSpin } from './server';
 
 export const whatsappRouter = express.Router();
 
@@ -88,12 +89,13 @@ whatsappRouter.post('/campaign/start', async (req, res) => {
         const jid = `${phone}@s.whatsapp.net`;
         
         try {
-            await sock.sendMessage(jid, { text: message });
+            const spinnedMessage = antiBanSpin(message);
+            await sock.sendMessage(jid, { text: spinnedMessage });
             console.log(`WhatsApp sent to ${phone}`);
         } catch (e) {
             console.error(`WhatsApp failed to send to ${phone}`, e);
         }
-        await delay(Math.random() * 3000 + 3000); // 3-6 sec delay to avoid ban
+        await delay(Math.random() * 6000 + 4000); // 4-10 sec random delay to avoid ban
     }
 });
 
