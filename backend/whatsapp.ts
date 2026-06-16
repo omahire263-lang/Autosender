@@ -227,20 +227,41 @@ whatsappRouter.post('/auth/pair', async (req, res) => {
     let phone = req.body.phone?.replace(/[^0-9]/g, '');
     if (!phone) return res.status(400).json({ error: 'Phone number is required' });
 
-    if (!sock) {
-        await initWhatsApp();
-        await delay(3000);
-    }
-
-    if (!sock) {
-        return res.status(500).json({ error: 'Failed to initialize WhatsApp. Please try again.' });
-    }
-
-    if (sock.user) {
-        return res.status(400).json({ error: 'WhatsApp is already logged in. Please logout first.' });
-    }
-
     try {
+        if (!sock || !sock.user) {
+            if (!sock) {
+                await initWhatsApp();
+            }
+            await delay(3000);
+        }
+
+        if (!sock) {
+            return res.status(500).json({ error: 'Failed to initialize WhatsApp. Please try again.' });
+        }
+
+        if (sock.user) {
+            return res.status(400).json({ error: 'WhatsApp is already logged in. Please logout first.' });
+        }
+
+        if (sock.connectionState !== 'open') {
+            await new Promise<void>((resolve, reject) => {
+                const handler = (update: any) => {
+                    if (update.connection === 'open') {
+                        sock?.ev.off('connection.update', handler);
+                        resolve();
+                    } else if (update.connection === 'close') {
+                        sock?.ev.off('connection.update', handler);
+                        reject(new Error('Connection closed while establishing WhatsApp session'));
+                    }
+                };
+                sock?.ev.on('connection.update', handler);
+                setTimeout(() => {
+                    sock?.ev.off('connection.update', handler);
+                    resolve();
+                }, 15000);
+            });
+        }
+
         const code = await sock.requestPairingCode(phone);
         res.json({ success: true, code: code?.match(/.{1,4}/g)?.join('-') || code });
     } catch (err: any) {
