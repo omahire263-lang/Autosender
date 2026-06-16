@@ -81,11 +81,12 @@ function App() {
   const [waPhone, setWaPhone] = useState('');
   const [waCode, setWaCode] = useState('');
   const [isWaConnected, setIsWaConnected] = useState(false);
-  const [waGroups, setWaGroups] = useState<{id: string, subject: string}[]>([]);
+  const [waGroups, setWaGroups] = useState<{id: string, subject: string, isAdmin: boolean}[]>([]);
   const [waSelectedGroup, setWaSelectedGroup] = useState('');
   const [waContactsStr, setWaContactsStr] = useState('');
   const [waMessage, setWaMessage] = useState('Hello from WhatsApp Automation!');
   const [isWaLoading, setIsWaLoading] = useState(false);
+  const [isGroupsRefreshing, setIsGroupsRefreshing] = useState(false);
 
   const fetchGroups = useCallback(async () => {
     setIsGroupsLoading(true);
@@ -135,13 +136,25 @@ function App() {
       const res = await axios.get<{ isConnected: boolean }>(`${API_URL}/whatsapp/status`);
       setIsWaConnected(res.data.isConnected);
       if (res.data.isConnected) {
-        const grpRes = await axios.get<{ groups: any[] }>(`${API_URL}/whatsapp/groups`);
-        setWaGroups(grpRes.data.groups);
+        const grpRes = await axios.get<{ groups: {id: string, subject: string, isAdmin: boolean}[] }>(`${API_URL}/whatsapp/groups`);
+        setWaGroups(grpRes.data.groups || []);
       }
     } catch (error) {
       console.error(error);
     }
   }, []);
+
+  const refreshWaGroups = async () => {
+    setIsGroupsRefreshing(true);
+    try {
+      const grpRes = await axios.get<{ groups: {id: string, subject: string, isAdmin: boolean}[] }>(`${API_URL}/whatsapp/groups`);
+      setWaGroups(grpRes.data.groups || []);
+    } catch (error) {
+      alert('Failed to load groups');
+    } finally {
+      setIsGroupsRefreshing(false);
+    }
+  };
 
   const initSession = useCallback(async () => {
     setIsLoading(true);
@@ -525,15 +538,31 @@ if (platform === 'NONE') {
                   className="w-full h-32 bg-gray-100 border border-gray-300 text-gray-900 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 mb-4 resize-none text-sm"
                   placeholder="+919876543210&#10;+1234567890"></textarea>
 
-                <label className="block text-sm text-gray-600 mb-2 font-medium">Select Group (For adding members):</label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm text-gray-600 font-medium">Select Your Admin Group:</label>
+                  <button
+                    onClick={refreshWaGroups}
+                    disabled={isGroupsRefreshing}
+                    className="text-xs text-green-600 hover:text-green-800 font-semibold flex items-center gap-1 disabled:opacity-50"
+                  >
+                    {isGroupsRefreshing ? 'Loading...' : '🔄 Refresh Groups'}
+                  </button>
+                </div>
                 <select 
                   value={waSelectedGroup} onChange={e => setWaSelectedGroup(e.target.value)}
                   className="w-full bg-gray-100 border border-gray-300 text-gray-900 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 mb-4"
                 >
-                  <option value="">-- Select Group --</option>
-                  {waGroups.map(g => (
-                    <option key={g.id} value={g.id}>{g.subject}</option>
+                  <option value="">-- Select Group ({waGroups.filter(g => g.isAdmin).length} admin groups) --</option>
+                  {waGroups.filter(g => g.isAdmin).map(g => (
+                    <option key={g.id} value={g.id}>👑 {g.subject}</option>
                   ))}
+                  {waGroups.filter(g => !g.isAdmin).length > 0 && (
+                    <optgroup label="── Other Groups ──">
+                      {waGroups.filter(g => !g.isAdmin).map(g => (
+                        <option key={g.id} value={g.id}>{g.subject}</option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
 
                 <button onClick={addWaGroupMembers} className="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-lg font-bold transition-colors shadow-sm">
