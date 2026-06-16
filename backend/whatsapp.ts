@@ -248,7 +248,10 @@ whatsappRouter.get('/groups', async (req, res) => {
 
     try {
         const chats = await sock.groupFetchAllParticipating();
-        const myJid = jidNormalizedUser(sock.user?.id);
+        if (!sock || !sock.user) {
+            return res.status(400).json({ error: 'WhatsApp disconnected while fetching groups' });
+        }
+        const myJid = jidNormalizedUser(sock.user.id);
 
         const groups = Object.values(chats).map(g => {
             const isAdmin = (g.participants || []).some(p => jidNormalizedUser(p.id) === myJid && (p.admin === 'admin' || p.admin === 'superadmin'));
