@@ -468,10 +468,28 @@ whatsappRouter.post('/extract-existing-group', async (req, res) => {
     }
 
     try {
-        console.log(`Fetching metadata for existing group: ${groupId}`);
-        const metadata = await activeSock.groupMetadata(groupId);
+        console.log(`Fetching participants for existing group: ${groupId}`);
         
-        const participants = metadata.participants || [];
+        let participants: any[] = [];
+        let subject = 'Unknown Group';
+
+        // Try getting from already fetched participating groups first
+        try {
+            const groups = await activeSock.groupFetchAllParticipating();
+            if (groups[groupId]) {
+                participants = groups[groupId].participants || [];
+                subject = groups[groupId].subject || subject;
+            }
+        } catch (err) {
+            console.log('Could not fetch from participating list, fallback to metadata...');
+        }
+
+        // If participants is empty, fallback to metadata
+        if (participants.length === 0) {
+            const metadata = await activeSock.groupMetadata(groupId);
+            participants = metadata.participants || [];
+            subject = metadata.subject || subject;
+        }
         const phoneNumbers = participants
             .map(p => {
                 if (!p.id.includes('@s.whatsapp.net')) return null;
@@ -490,7 +508,7 @@ whatsappRouter.post('/extract-existing-group', async (req, res) => {
         res.json({
             success: true,
             groupId,
-            subject: metadata.subject,
+            subject: subject,
             participantCount: phoneNumbers.length,
             members: phoneNumbers,
             message: "Data extracted successfully."
