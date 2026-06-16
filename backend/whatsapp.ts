@@ -228,11 +228,9 @@ whatsappRouter.post('/auth/pair', async (req, res) => {
     if (!phone) return res.status(400).json({ error: 'Phone number is required' });
 
     try {
-        if (!sock || !sock.user) {
-            if (!sock) {
-                await initWhatsApp();
-            }
-            await delay(3000);
+        if (!sock) {
+            await initWhatsApp();
+            await delay(4000);
         }
 
         if (!sock) {
@@ -241,25 +239,6 @@ whatsappRouter.post('/auth/pair', async (req, res) => {
 
         if (sock.user) {
             return res.status(400).json({ error: 'WhatsApp is already logged in. Please logout first.' });
-        }
-
-        if (sock.connectionState !== 'open') {
-            await new Promise<void>((resolve, reject) => {
-                const handler = (update: any) => {
-                    if (update.connection === 'open') {
-                        sock?.ev.off('connection.update', handler);
-                        resolve();
-                    } else if (update.connection === 'close') {
-                        sock?.ev.off('connection.update', handler);
-                        reject(new Error('Connection closed while establishing WhatsApp session'));
-                    }
-                };
-                sock?.ev.on('connection.update', handler);
-                setTimeout(() => {
-                    sock?.ev.off('connection.update', handler);
-                    resolve();
-                }, 15000);
-            });
         }
 
         const code = await sock.requestPairingCode(phone);
