@@ -138,6 +138,50 @@ export async function initWhatsApp() {
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
+whatsappRouter.get('/auth/session-string', async (req, res) => {
+    try {
+        const db = getDb();
+        const doc = await db.collection('whatsapp_sessions').doc(WA_SESSION_DOC).get();
+        if (!doc.exists) return res.status(404).json({ error: 'No active session found' });
+        
+        const data = doc.data();
+        const jsonStr = JSON.stringify(data);
+        const base64Str = Buffer.from(jsonStr).toString('base64');
+        res.json({ sessionString: base64Str });
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+whatsappRouter.post('/auth/login-session', async (req, res) => {
+    const { sessionString } = req.body;
+    if (!sessionString) return res.status(400).json({ error: 'Session string is required' });
+
+    try {
+        const jsonStr = Buffer.from(sessionString, 'base64').toString('utf-8');
+        const data = JSON.parse(jsonStr);
+        
+        if (!data.creds) {
+            return res.status(400).json({ error: 'Invalid session string format' });
+        }
+
+        const db = getDb();
+        await db.collection('whatsapp_sessions').doc(WA_SESSION_DOC).set(data);
+
+        // Re-initialize whatsapp with new session
+        if (sock) {
+            try { sock.logout(); } catch {}
+            sock = null;
+        }
+        await initWhatsApp();
+        
+        res.json({ success: true, message: 'Logged in using session string' });
+    } catch (e: any) {
+        console.error('Login via session string failed:', e);
+        res.status(500).json({ error: 'Failed to process session string. It may be invalid.' });
+    }
+});
+
 whatsappRouter.post('/auth/pair', async (req, res) => {
     let phone = req.body.phone?.replace(/[^0-9]/g, '');
     if (!phone) return res.status(400).json({ error: 'Phone number is required' });

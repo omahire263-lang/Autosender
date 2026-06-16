@@ -87,6 +87,9 @@ function App() {
   const [waMessage, setWaMessage] = useState('Hello from WhatsApp Automation!');
   const [isWaLoading, setIsWaLoading] = useState(false);
   const [isGroupsRefreshing, setIsGroupsRefreshing] = useState(false);
+  const [waLoginMode, setWaLoginMode] = useState<'PHONE' | 'STRING'>('PHONE');
+  const [waSessionString, setWaSessionString] = useState('');
+  const [isWaStringLoading, setIsWaStringLoading] = useState(false);
 
   const fetchGroups = useCallback(async () => {
     setIsGroupsLoading(true);
@@ -422,6 +425,33 @@ function App() {
     }
   };
 
+  const handleWaStringLogin = async () => {
+    if (!waSessionString.trim()) {
+      alert('Please enter a session string');
+      return;
+    }
+    setIsWaStringLoading(true);
+    try {
+      await axios.post(`${API_URL}/whatsapp/auth/login-session`, { sessionString: waSessionString.trim() });
+      setStep('DASHBOARD');
+      await fetchWaStatus();
+    } catch (error: any) {
+      alert(error.response?.data?.error || 'Failed to login with session string');
+    } finally {
+      setIsWaStringLoading(false);
+    }
+  };
+
+  const copyWaSessionString = async () => {
+    try {
+      const res = await axios.get<{sessionString: string}>(`${API_URL}/whatsapp/auth/session-string`);
+      await navigator.clipboard.writeText(res.data.sessionString);
+      alert('WhatsApp Session String Copied to Clipboard! Save it securely.');
+    } catch (error: any) {
+      alert('Failed to export session string: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
   const startWaCampaign = async () => {
     const contacts = waContactsStr.split(/[\n,]+/).map(c => c.trim()).filter(c => c);
     if (!contacts.length) return alert('No contacts found');
@@ -526,6 +556,9 @@ if (platform === 'NONE') {
               <button onClick={() => { setStep('PHONE'); setPlatform('NONE'); }} className="flex items-center gap-2 bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-lg font-semibold transition-colors">
                 Back Home
               </button>
+              <button onClick={copyWaSessionString} className="flex items-center gap-2 bg-green-100 hover:bg-green-200 text-green-800 px-4 py-2 rounded-lg font-semibold transition-colors">
+                Copy Session String
+              </button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -586,6 +619,7 @@ if (platform === 'NONE') {
         <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-green-300 text-center">
           <div className="flex justify-center mb-6"><MessageCircle size={56} className="text-green-600" /></div>
           <h2 className="text-2xl font-bold mb-3">WhatsApp Automation</h2>
+          
           {waCode ? (
             <div className="mb-6">
               <p className="text-gray-600 mb-4">Your Pairing Code:</p>
@@ -596,19 +630,56 @@ if (platform === 'NONE') {
             </div>
           ) : (
             <>
-              <p className="text-gray-600 mb-8 text-sm px-2">
-                Enter your phone number to receive an 8-digit linking code on your WhatsApp app. No QR scan needed!
-              </p>
-              <input type="text" placeholder="Phone Number (e.g. +91...)"
-                value={waPhone} onChange={e => setWaPhone(e.target.value)}
-                className="w-full bg-gray-100 p-4 rounded-xl mb-4 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900 placeholder-gray-500"
-              />
-              <button 
-                onClick={handleWaPair}
-                disabled={isWaLoading}
-                className="w-full bg-green-600 text-white hover:bg-green-700 p-4 rounded-xl font-bold transition-colors disabled:opacity-50">
-                {isWaLoading ? 'Requesting Code...' : 'Get 8-Digit Pairing Code'}
-              </button>
+              <div className="flex gap-2 mb-6 p-1 bg-gray-100 rounded-lg">
+                <button
+                  onClick={() => setWaLoginMode('PHONE')}
+                  className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${waLoginMode === 'PHONE' ? 'bg-white shadow text-green-600' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  Pairing Code
+                </button>
+                <button
+                  onClick={() => setWaLoginMode('STRING')}
+                  className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${waLoginMode === 'STRING' ? 'bg-white shadow text-green-600' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  Session String
+                </button>
+              </div>
+
+              {waLoginMode === 'PHONE' ? (
+                <>
+                  <p className="text-gray-600 mb-6 text-sm px-2">
+                    Enter your phone number to receive an 8-digit linking code on your WhatsApp app. No QR scan needed!
+                  </p>
+                  <input type="text" placeholder="Phone Number (e.g. +91...)"
+                    value={waPhone} onChange={e => setWaPhone(e.target.value)}
+                    className="w-full bg-gray-100 p-4 rounded-xl mb-4 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900 placeholder-gray-500"
+                  />
+                  <button 
+                    onClick={handleWaPair}
+                    disabled={isWaLoading}
+                    className="w-full bg-green-600 text-white hover:bg-green-700 p-4 rounded-xl font-bold transition-colors disabled:opacity-50">
+                    {isWaLoading ? 'Requesting Code...' : 'Get 8-Digit Pairing Code'}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="text-gray-600 mb-6 text-sm px-2">
+                    Paste your previously exported session string here to login instantly.
+                  </p>
+                  <textarea
+                    placeholder="Paste Session String..."
+                    value={waSessionString}
+                    onChange={e => setWaSessionString(e.target.value)}
+                    className="w-full bg-gray-100 p-4 rounded-xl mb-4 h-32 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900 placeholder-gray-500 resize-none text-xs"
+                  />
+                  <button 
+                    onClick={handleWaStringLogin}
+                    disabled={isWaStringLoading}
+                    className="w-full bg-green-600 text-white hover:bg-green-700 p-4 rounded-xl font-bold transition-colors disabled:opacity-50">
+                    {isWaStringLoading ? 'Logging In...' : 'Login with Session String'}
+                  </button>
+                </>
+              )}
             </>
           )}
           
