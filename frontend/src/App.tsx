@@ -530,136 +530,129 @@ if (platform === 'NONE') {
   }
 
   if (platform === 'WHATSAPP') {
-    if (step === 'DASHBOARD' && isWaConnected) {
-      return (
-        <div className="min-h-screen bg-gray-100 text-gray-900 p-4 md:p-8">
-          <div className="max-w-4xl mx-auto space-y-6">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-              <h1 className="text-3xl sm:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-green-500 to-green-700 flex items-center gap-3">
-                <MessageCircle className="text-green-500" size={32} /> WhatsApp Sender
-              </h1>
+    return (
+      <div className="min-h-screen bg-gray-100 text-gray-900 p-4 md:p-8">
+        <div className="max-w-4xl mx-auto space-y-6">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <h1 className="text-3xl sm:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-green-500 to-green-700 flex items-center gap-3">
+              <MessageCircle className="text-green-500" size={32} /> WhatsApp Extractor
+            </h1>
+            <div className="flex gap-3 items-center">
               <button onClick={() => { setStep('PHONE'); setPlatform('NONE'); }} className="flex items-center gap-2 bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-lg font-semibold transition-colors">
                 Back Home
               </button>
-              <button onClick={copyWaSessionString} className="flex items-center gap-2 bg-green-100 hover:bg-green-200 text-green-800 px-4 py-2 rounded-lg font-semibold transition-colors">
-                Copy Session String
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col md:col-span-2 max-w-2xl mx-auto w-full">
-                <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-gray-900"><Users className="text-green-500" /> Extract Group Members</h2>
-                
-                <label className="block text-sm text-gray-600 mb-2 font-medium">WhatsApp Group Invite Link:</label>
-                <input
-                  type="text"
-                  value={waGroupLink} onChange={e => setWaGroupLink(e.target.value)}
-                  className="w-full bg-gray-100 border border-gray-300 text-gray-900 p-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 mb-4"
-                  placeholder="https://chat.whatsapp.com/..."
-                />
-
-                <button 
-                  onClick={extractWaGroupMembers} 
-                  disabled={isWaExtracting}
-                  className="w-full bg-green-600 hover:bg-green-700 text-white p-4 rounded-lg font-bold transition-colors shadow-sm disabled:opacity-50 flex justify-center items-center gap-2"
-                >
-                  {isWaExtracting ? 'Extracting...' : 'Extract Members'}
+              {isWaConnected && (
+                <button onClick={copyWaSessionString} className="flex items-center gap-2 bg-green-100 hover:bg-green-200 text-green-800 px-4 py-2 rounded-lg font-semibold transition-colors">
+                  Copy Session
                 </button>
-
-                {waExtractedNumbers.length > 0 && (
-                  <div className="mt-6">
-                    <div className="flex justify-between items-center mb-2">
-                      <label className="text-sm text-gray-600 font-medium">Extracted Numbers ({waExtractedNumbers.length}):</label>
-                      <button onClick={copyExtractedNumbers} className="text-xs bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1 rounded font-semibold transition-colors">
-                        Copy All
-                      </button>
-                    </div>
-                    <textarea
-                      readOnly
-                      value={waExtractedNumbers.join('\n')}
-                      className="w-full h-48 bg-gray-50 border border-gray-300 text-gray-800 p-3 rounded-lg focus:outline-none resize-y text-sm font-mono"
-                    ></textarea>
-                  </div>
-                )}
-              </div>
+              )}
             </div>
           </div>
-        </div>
-      );
-    }
 
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-white text-gray-900 p-4">
-        <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-green-300 text-center">
-          <div className="flex justify-center mb-6"><MessageCircle size={56} className="text-green-600" /></div>
-          <h2 className="text-2xl font-bold mb-3">WhatsApp Automation</h2>
-          
-          {waCode ? (
-            <div className="mb-6">
-              <p className="text-gray-600 mb-4">Your Pairing Code:</p>
-              <div className="text-4xl font-mono tracking-widest font-black text-green-700 bg-green-50 p-4 rounded-xl border-2 border-green-200">
-                {waCode}
-              </div>
-              <p className="text-sm text-gray-500 mt-4">Enter this code in your WhatsApp linked devices. Waiting for connection...</p>
-            </div>
-          ) : (
-            <>
-              <div className="flex gap-2 mb-6 p-1 bg-gray-100 rounded-lg">
-                <button
-                  onClick={() => setWaLoginMode('PHONE')}
-                  className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${waLoginMode === 'PHONE' ? 'bg-white shadow text-green-600' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  Pairing Code
-                </button>
-                <button
-                  onClick={() => setWaLoginMode('STRING')}
-                  className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${waLoginMode === 'STRING' ? 'bg-white shadow text-green-600' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  Session String
-                </button>
-              </div>
-
-              {waLoginMode === 'PHONE' ? (
-                <>
-                  <p className="text-gray-600 mb-6 text-sm px-2">
-                    Enter your phone number to receive an 8-digit linking code on your WhatsApp app. No QR scan needed!
-                  </p>
-                  <input type="text" placeholder="Phone Number (e.g. +91...)"
-                    value={waPhone} onChange={e => setWaPhone(e.target.value)}
-                    className="w-full bg-gray-100 p-4 rounded-xl mb-4 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900 placeholder-gray-500"
-                  />
-                  <button 
-                    onClick={handleWaPair}
-                    disabled={isWaLoading}
-                    className="w-full bg-green-600 text-white hover:bg-green-700 p-4 rounded-xl font-bold transition-colors disabled:opacity-50">
-                    {isWaLoading ? 'Requesting Code...' : 'Get 8-Digit Pairing Code'}
-                  </button>
-                </>
-              ) : (
-                <>
-                  <p className="text-gray-600 mb-6 text-sm px-2">
-                    Paste your previously exported session string here to login instantly.
-                  </p>
-                  <textarea
-                    placeholder="Paste Session String..."
-                    value={waSessionString}
-                    onChange={e => setWaSessionString(e.target.value)}
-                    className="w-full bg-gray-100 p-4 rounded-xl mb-4 h-32 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900 placeholder-gray-500 resize-none text-xs"
-                  />
-                  <button 
-                    onClick={handleWaStringLogin}
-                    disabled={isWaStringLoading}
-                    className="w-full bg-green-600 text-white hover:bg-green-700 p-4 rounded-xl font-bold transition-colors disabled:opacity-50">
-                    {isWaStringLoading ? 'Logging In...' : 'Login with Session String'}
-                  </button>
-                </>
-              )}
-            </>
+          {!isWaConnected && (
+             <div className="bg-red-100 border border-red-300 text-red-700 p-4 rounded-xl text-center font-bold">
+                ⚠️ Backend Bot is not connected to WhatsApp! Extraction will fail until an admin connects a WhatsApp account.
+             </div>
           )}
-          
-          <button onClick={() => { setPlatform('NONE'); setWaCode(''); }} className="mt-6 text-gray-500 hover:text-gray-700 underline text-sm transition-colors">
-            Go Back to Selection
-          </button>
+
+          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col md:col-span-2 max-w-2xl mx-auto w-full">
+            <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-gray-900"><Users className="text-green-500" /> Extract Group Members</h2>
+            
+            <label className="block text-sm text-gray-600 mb-2 font-medium">WhatsApp Group Invite Link:</label>
+            <input
+              type="text"
+              value={waGroupLink} onChange={e => setWaGroupLink(e.target.value)}
+              className="w-full bg-gray-100 border border-gray-300 text-gray-900 p-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 mb-4"
+              placeholder="https://chat.whatsapp.com/..."
+            />
+
+            <button 
+              onClick={extractWaGroupMembers} 
+              disabled={isWaExtracting}
+              className="w-full bg-green-600 hover:bg-green-700 text-white p-4 rounded-lg font-bold transition-colors shadow-sm disabled:opacity-50 flex justify-center items-center gap-2"
+            >
+              {isWaExtracting ? 'Extracting...' : 'Extract Members'}
+            </button>
+
+            {waExtractedNumbers.length > 0 && (
+              <div className="mt-6">
+                <div className="flex justify-between items-center mb-2">
+                  <label className="text-sm text-gray-600 font-medium">Extracted Numbers ({waExtractedNumbers.length}):</label>
+                  <button onClick={copyExtractedNumbers} className="text-xs bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1 rounded font-semibold transition-colors">
+                    Copy All
+                  </button>
+                </div>
+                <textarea
+                  readOnly
+                  value={waExtractedNumbers.join('\n')}
+                  className="w-full h-48 bg-gray-50 border border-gray-300 text-gray-800 p-3 rounded-lg focus:outline-none resize-y text-sm font-mono"
+                ></textarea>
+              </div>
+            )}
+          </div>
+
+          {!isWaConnected && (
+             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col max-w-2xl mx-auto w-full mt-8">
+               <h3 className="text-lg font-bold mb-4 text-gray-800 border-b pb-2">Admin: Connect Bot</h3>
+               
+               {waCode ? (
+                  <div className="mb-6">
+                    <p className="text-gray-600 mb-4">Your Pairing Code:</p>
+                    <div className="text-4xl font-mono tracking-widest font-black text-green-700 bg-green-50 p-4 rounded-xl border-2 border-green-200 text-center">
+                      {waCode}
+                    </div>
+                    <p className="text-sm text-gray-500 mt-4 text-center">Enter this code in your WhatsApp linked devices. Waiting for connection...</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex gap-2 mb-6 p-1 bg-gray-100 rounded-lg">
+                      <button
+                        onClick={() => setWaLoginMode('PHONE')}
+                        className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${waLoginMode === 'PHONE' ? 'bg-white shadow text-green-600' : 'text-gray-500 hover:text-gray-700'}`}
+                      >
+                        Pairing Code
+                      </button>
+                      <button
+                        onClick={() => setWaLoginMode('STRING')}
+                        className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${waLoginMode === 'STRING' ? 'bg-white shadow text-green-600' : 'text-gray-500 hover:text-gray-700'}`}
+                      >
+                        Session String
+                      </button>
+                    </div>
+
+                    {waLoginMode === 'PHONE' ? (
+                      <>
+                        <input type="text" placeholder="Phone Number (e.g. +91...)"
+                          value={waPhone} onChange={e => setWaPhone(e.target.value)}
+                          className="w-full bg-gray-100 p-4 rounded-xl mb-4 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900 placeholder-gray-500"
+                        />
+                        <button 
+                          onClick={handleWaPair}
+                          disabled={isWaLoading}
+                          className="w-full bg-gray-800 text-white hover:bg-gray-900 p-4 rounded-xl font-bold transition-colors disabled:opacity-50">
+                          {isWaLoading ? 'Requesting Code...' : 'Get 8-Digit Pairing Code'}
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <textarea
+                          placeholder="Paste Session String..."
+                          value={waSessionString}
+                          onChange={e => setWaSessionString(e.target.value)}
+                          className="w-full bg-gray-100 p-4 rounded-xl mb-4 h-32 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900 placeholder-gray-500 resize-none text-xs"
+                        />
+                        <button 
+                          onClick={handleWaStringLogin}
+                          disabled={isWaStringLoading}
+                          className="w-full bg-green-600 text-white hover:bg-green-700 p-4 rounded-xl font-bold transition-colors disabled:opacity-50">
+                          {isWaStringLoading ? 'Logging In...' : 'Login with Session String'}
+                        </button>
+                      </>
+                    )}
+                  </>
+                )}
+             </div>
+          )}
         </div>
       </div>
     );
