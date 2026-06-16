@@ -525,7 +525,7 @@ if (platform === 'NONE') {
                   className="w-full h-32 bg-gray-100 border border-gray-300 text-gray-900 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 mb-4 resize-none text-sm"
                   placeholder="+919876543210&#10;+1234567890"></textarea>
 
-                <label className="block text-sm text-gray-600 mb-2 font-medium">Select Admin Group (For adding members):</label>
+                <label className="block text-sm text-gray-600 mb-2 font-medium">Select Group (For adding members):</label>
                 <select 
                   value={waSelectedGroup} onChange={e => setWaSelectedGroup(e.target.value)}
                   className="w-full bg-gray-100 border border-gray-300 text-gray-900 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 mb-4"
