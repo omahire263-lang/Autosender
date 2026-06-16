@@ -96,9 +96,9 @@ function App() {
     try {
       const res = await axios.get<{ groups: Group[] }>(`${API_URL}/telegram/groups`);
       setGroups(res.data.groups);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      alert('Failed to fetch groups from server');
+      alert(`Failed to fetch groups: ${error.response?.data?.error || error.message || 'Server error'}`);
     } finally {
       setIsGroupsLoading(false);
     }

@@ -161,6 +161,19 @@ app.post('/api/auth/login', async (req, res) => {
   // Session-based login (alternative when OTP is rate-limited)
   if (sessionString && !code) {
     try {
+      // Check if already connected by finding a matching session string (approximate)
+      const existingClient = connectedClients.find(c => {
+        try { return (c.client.session as StringSession).save() === sessionString; } catch { return false; }
+      });
+      if (existingClient) {
+        const me = await existingClient.client.getMe();
+        return res.json({
+          success: true,
+          user: me.username || me.firstName || 'User',
+          token: existingClient.sessionToken
+        });
+      }
+
       const stringSession = new StringSession(sessionString);
       const nextClient = new TelegramClient(stringSession, apiId, apiHash, { connectionRetries: 5 });
       await nextClient.connect();
@@ -180,19 +193,32 @@ app.post('/api/auth/login', async (req, res) => {
         createdAt: FieldValue.serverTimestamp()
       }, { merge: true });
 
+      const normalizedNew = normalizePhone(phone || '');
+      const alreadySaved = connectedClients.some(c => normalizePhone(c.phoneNumber) === normalizedNew);
+      if (!alreadySaved) {
+        connectedClients.push({
+          phoneNumber: phone || '',
+          sessionToken: sessionToken,
+          client: nextClient,
+          messagesSent: 0
+        });
+      }
+
       pendingAuthClient = nextClient;
       pendingPhone = phone;
       setSessionCookie(res, sessionToken);
-
-      
 
       res.json({
         success: true,
         user: me.username || me.firstName || 'User',
         token: sessionToken
       });
-    } catch (error) {
-      res.status(400).json({ error: getErrorMessage(error) });
+    } catch (error: any) {
+      let errMsg = getErrorMessage(error);
+      if (errMsg.includes('AUTH_KEY_DUPLICATED')) {
+        errMsg = 'Session is already active elsewhere. Stop the other instance first.';
+      }
+      res.status(400).json({ error: errMsg });
     }
     return;
   }
@@ -296,6 +322,20 @@ app.post('/api/auth/init', async (req, res) => {
       return res.status(401).json({ error: 'Invalid session' });
     }
 
+    const existingClient = connectedClients.find(c => c.sessionToken === sessionToken);
+    if (existingClient) {
+      try {
+        const me = await existingClient.client.getMe();
+        return res.json({
+          success: true,
+          user: me.username || me.firstName || 'User',
+          token: sessionToken
+        });
+      } catch (e) {
+        // Fallback to reconnecting
+      }
+    }
+
     const stringSession = new StringSession(user.sessionString);
     const nextClient = new TelegramClient(stringSession, apiId, apiHash, { connectionRetries: 5 });
     await nextClient.connect();
@@ -339,9 +379,7 @@ app.post('/api/auth/init', async (req, res) => {
   } catch (error: any) {
     let errMsg = getErrorMessage(error);
     if (errMsg.includes('AUTH_KEY_DUPLICATED')) {
-      // If it's already connected elsewhere, ignore it for initialization since it's already running.
-      console.warn('Init auth duplicate key ignored');
-      return res.status(200).json({ success: true, user: 'User (Already Active)', token: sessionToken });
+      errMsg = 'Session is already active in another server instance. Please wait for it to close or generate a new session string.';
     }
     res.status(401).json({ error: errMsg });
   }
@@ -371,11 +409,15 @@ app.post('/api/auth/save-session', async (req, res) => {
       const userData = existingSnap.docs[0].data();
       const existingToken = userData.sessionToken;
       setSessionCookie(res, existingToken);
-      return res.json({
-        success: true,
-        user: userData.phoneNumber || 'User',
-        token: existingToken
-      });
+      
+      const existingClient = connectedClients.find(c => c.sessionToken === existingToken);
+      if (existingClient) {
+        return res.json({
+          success: true,
+          user: userData.phoneNumber || 'User',
+          token: existingToken
+        });
+      }
     }
 
     const stringSession = new StringSession(sessionString);
@@ -422,7 +464,7 @@ app.post('/api/auth/save-session', async (req, res) => {
   } catch (error: any) {
     let errMsg = getErrorMessage(error);
     if (errMsg.includes('AUTH_KEY_DUPLICATED')) {
-      errMsg = 'This account is already connected and active! Go back to the dashboard to see it.';
+      errMsg = 'This account is already active elsewhere! Please stop the other instance first.';
     }
     res.status(400).json({ error: errMsg });
   }
