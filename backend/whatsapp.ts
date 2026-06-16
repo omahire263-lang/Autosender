@@ -222,10 +222,12 @@ whatsappRouter.post('/auth/login-session', async (req, res) => {
     }
 });
 
-// Pairing code login - uses FRESH socket, ignores stored session
+// Pairing code login - robust with retry and connection wait
 whatsappRouter.post('/auth/pair', async (req, res) => {
     let phone = req.body.phone?.replace(/[^0-9]/g, '');
     if (!phone) return res.status(400).json({ error: 'Phone number is required' });
+
+    const sendError = (msg: string) => res.status(500).json({ error: msg });
 
     try {
         if (sock) {
@@ -234,25 +236,54 @@ whatsappRouter.post('/auth/pair', async (req, res) => {
         }
 
         const db = getDb();
-        const docRef = db.collection('whatsapp_sessions').doc(WA_SESSION_DOC);
-        await docRef.delete().catch(() => {});
+        await db.collection('whatsapp_sessions').doc(WA_SESSION_DOC).delete().catch(() => {});
 
         await initWhatsApp();
-        await delay(5000);
 
-        if (!sock) {
-            return res.status(500).json({ error: 'Failed to initialize WhatsApp. Please try again.' });
+        let attempts = 0;
+        let code: string | undefined;
+        const maxAttempts = 3;
+
+        while (attempts < maxAttempts) {
+            attempts++;
+            try {
+                await delay(6000);
+
+                const currentSock = sock;
+                if (!currentSock) {
+                    if (attempts < maxAttempts) {
+                        console.log(`Pairing attempt ${attempts}: socket not ready, retrying...`);
+                        await initWhatsApp();
+                        continue;
+                    }
+                    return sendError('Failed to initialize WhatsApp after multiple attempts.');
+                }
+
+                if (currentSock.user) {
+                    return res.status(400).json({ error: 'WhatsApp is already logged in. Please logout first.' });
+                }
+
+                code = await currentSock.requestPairingCode(phone);
+                break;
+            } catch (err: any) {
+                if (attempts >= maxAttempts) {
+                    throw err;
+                }
+                const errMsg = err.message || 'Unknown error';
+                if (errMsg.includes('Connection') || errMsg.includes('close') || errMsg.includes('network')) {
+                    console.log(`Pairing attempt ${attempts} failed (${errMsg}), retrying in 5s...`);
+                    await delay(5000);
+                    if (!sock) await initWhatsApp();
+                } else {
+                    throw err;
+                }
+            }
         }
 
-        if (sock.user) {
-            return res.status(400).json({ error: 'WhatsApp is already logged in. Please logout first.' });
-        }
-
-        const code = await sock.requestPairingCode(phone);
         res.json({ success: true, code: code?.match(/.{1,4}/g)?.join('-') || code });
     } catch (err: any) {
-        console.error('Pairing error', err);
-        res.status(500).json({ error: err.message || 'Failed to request pairing code' });
+        console.error('Pairing error (final):', err);
+        sendError(err.message || 'Failed to request pairing code');
     }
 });
 
