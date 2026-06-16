@@ -7,7 +7,8 @@ import {
     proto,
     AuthenticationState,
     SignalDataTypeMap,
-    jidNormalizedUser
+    jidNormalizedUser,
+    Browsers
 } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import express from 'express';
@@ -131,7 +132,7 @@ export async function initWhatsApp() {
             auth: state,
             printQRInTerminal: false,
             logger,
-            browser: ['Ubuntu', 'Chrome', '20.0.04']
+            browser: Browsers.macOS('Desktop')
         });
 
         sock.ev.on('creds.update', saveCreds);
