@@ -227,19 +227,21 @@ whatsappRouter.post('/auth/pair', async (req, res) => {
     let phone = req.body.phone?.replace(/[^0-9]/g, '');
     if (!phone) return res.status(400).json({ error: 'Phone number is required' });
 
-    const activeSock = getActiveSocket();
-    if (!activeSock) {
+    if (!sock) {
         await initWhatsApp();
         await delay(3000);
     }
 
-    const currentSock = getActiveSocket();
-    if (!currentSock) {
-        return res.status(500).json({ error: 'WhatsApp not connected. Please login first.' });
+    if (!sock) {
+        return res.status(500).json({ error: 'Failed to initialize WhatsApp. Please try again.' });
+    }
+
+    if (sock.user) {
+        return res.status(400).json({ error: 'WhatsApp is already logged in. Please logout first.' });
     }
 
     try {
-        const code = await currentSock.requestPairingCode(phone);
+        const code = await sock.requestPairingCode(phone);
         res.json({ success: true, code: code?.match(/.{1,4}/g)?.join('-') || code });
     } catch (err: any) {
         console.error('Pairing error', err);
