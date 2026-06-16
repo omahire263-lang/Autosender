@@ -280,12 +280,23 @@ app.post('/api/auth/init', async (req, res) => {
       return res.status(401).json({ error: 'Invalid session' });
     }
 
-    connectedClients.push({
-      phoneNumber: user.phoneNumber || '',
-      sessionToken: sessionToken,
-      client: nextClient,
-      messagesSent: 0
-    });
+    // Prevent duplicate entries in connectedClients
+    const alreadyConnected = connectedClients.some(c => c.phoneNumber === (user.phoneNumber || '') || c.sessionToken === sessionToken);
+    if (!alreadyConnected) {
+      connectedClients.push({
+        phoneNumber: user.phoneNumber || '',
+        sessionToken: sessionToken,
+        client: nextClient,
+        messagesSent: 0
+      });
+    } else {
+      // Update the client reference in case it was stale
+      const existingIdx = connectedClients.findIndex(c => c.sessionToken === sessionToken);
+      if (existingIdx >= 0) {
+        connectedClients[existingIdx].client = nextClient;
+        connectedClients[existingIdx].messagesSent = connectedClients[existingIdx].messagesSent || 0;
+      }
+    }
 
     
 
@@ -358,11 +369,13 @@ app.get('/api/telegram/groups', async (req, res) => {
 
   try {
     const dialogs = await activeClient.getDialogs({});
+    // Show ALL groups and supergroups - let extraction fail naturally for restricted ones
     const groups = dialogs.filter(d => {
       if (d.isGroup) return true;
       if (d.isChannel) {
         const e = d.entity as any;
-        return e?.megagroup === true && !e?.defaultBannedRights?.viewParticipants;
+        // Include all megagroups (supergroups), regardless of viewParticipants setting
+        return e?.megagroup === true;
       }
       return false;
     });
@@ -795,16 +808,23 @@ async function runCampaign() {
 
         if (isPeerFlood) {
           console.log(`PEER_FLOOD on account ${activeClientWrapper.phoneNumber}. Switching to next account...`);
+          const prevIndex = activeAccountIndex;
           activeAccountIndex++;
-          const loopedBack = (activeAccountIndex % connectedClients.length) === 0;
-          if (loopedBack) {
+          // Only pause if we've cycled through ALL accounts and all had PEER_FLOOD
+          const triedAll = (activeAccountIndex - prevIndex) >= connectedClients.length ||
+                           activeAccountIndex >= connectedClients.length;
+          if (triedAll && connectedClients.every((_, i) => {
+            // check if we've been through all accounts
+            return activeAccountIndex >= connectedClients.length;
+          })) {
             console.log("All accounts restricted. Pausing campaign for 1 hour...");
+            activeAccountIndex = 0; // reset
             try { await db.collection('campaigns').doc(campaign.dbId).update({ status: 'Paused (Flood)' }); } catch(e) {}
             await sleep(3600 * 1000); // 1 hour pause
             console.log("Resuming campaign after 1 hour pause.");
             try { await db.collection('campaigns').doc(campaign.dbId).update({ status: 'Sending' }); } catch(e) {}
           }
-          continue; // retry the same user, since we didn't shift it
+          continue; // retry the same user on next account
         }
         
         campaign.users.shift(); // remove after failure

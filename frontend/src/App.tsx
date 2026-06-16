@@ -839,7 +839,7 @@ return (
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col max-h-[400px]">
+          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col" style={{minHeight: '420px'}}>
             <div className="flex items-center justify-between mb-4 shrink-0">
               <h2 className="text-xl font-bold flex items-center gap-2 text-gray-900"><Users className="text-blue-400" /> Target Audience</h2>
               <button onClick={fetchGroups} className="text-sm bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded text-gray-600 font-medium">
@@ -847,7 +847,7 @@ return (
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto bg-gray-100 rounded p-3 mb-4 space-y-2 border border-gray-300">
+            <div className="overflow-y-auto bg-gray-100 rounded p-3 mb-4 space-y-2 border border-gray-300" style={{height: '200px'}}>
               {isGroupsLoading ? (
                 <p className="text-gray-500 text-sm text-center py-4">Fetching groups from Telegram...</p>
               ) : groups.length === 0 ? (
