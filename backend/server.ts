@@ -362,6 +362,21 @@ app.post('/api/auth/save-session', async (req, res) => {
   }
 
   try {
+    const db = getDb();
+    
+    // Check if this session string is already connected in the database
+    const existingSnap = await db.collection('users').where('sessionString', '==', sessionString).limit(1).get();
+    if (!existingSnap.empty) {
+      const userData = existingSnap.docs[0].data();
+      const existingToken = userData.sessionToken;
+      setSessionCookie(res, existingToken);
+      return res.json({
+        success: true,
+        user: userData.phoneNumber || 'User',
+        token: existingToken
+      });
+    }
+
     const stringSession = new StringSession(sessionString);
     const nextClient = new TelegramClient(stringSession, apiId, apiHash, { connectionRetries: 5 });
     await nextClient.connect();
