@@ -387,7 +387,6 @@ app.post('/api/auth/save-session', async (req, res) => {
     }
 
     const newToken = crypto.randomUUID();
-    const db = getDb();
 
     await db.collection('users').doc(phone || me.id?.toString() || newToken).set({
       phoneNumber: phone || '',
