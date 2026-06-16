@@ -381,7 +381,7 @@ whatsappRouter.post('/extract-group', async (req, res) => {
         const participants = metadata.participants || [];
         const phoneNumbers = participants
             .map(p => {
-                if (!p.id.includes('@s.whatsapp.net')) return null;
+                if (!p.id || p.id.includes('@lid') || p.id.includes('@g.us')) return null;
                 const rawNumber = p.id.split('@')[0].split(':')[0];
                 if (!rawNumber || rawNumber.length < 5) return null;
                 try {
@@ -501,7 +501,7 @@ whatsappRouter.post('/extract-existing-group', async (req, res) => {
         }
         const phoneNumbers = participants
             .map(p => {
-                if (!p.id.includes('@s.whatsapp.net')) return null;
+                if (!p.id || p.id.includes('@lid') || p.id.includes('@g.us')) return null;
                 const rawNumber = p.id.split('@')[0].split(':')[0];
                 if (!rawNumber || rawNumber.length < 5) return null;
                 try {
@@ -520,7 +520,7 @@ whatsappRouter.post('/extract-existing-group', async (req, res) => {
             subject: subject,
             participantCount: phoneNumbers.length,
             members: phoneNumbers,
-            message: "Data extracted successfully."
+            message: phoneNumbers.length > 0 ? `Extracted ${phoneNumbers.length} members successfully.` : "Extracted 0 members. Numbers might be hidden by WhatsApp privacy settings."
         });
     } catch (e: any) {
         console.error('Error extracting existing group members:', e);
