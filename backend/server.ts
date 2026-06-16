@@ -74,6 +74,16 @@ const getErrorMessage = (error: unknown) => {
   return error instanceof Error ? error.message : 'Unknown error';
 };
 
+// Normalize phone: strip + and leading country code (91) to get last 10 digits
+const normalizePhone = (phone: string): string => {
+  const digits = phone.replace(/\D/g, '');
+  // If it's a 12-digit number starting with 91 (Indian), strip the 91
+  if (digits.length === 12 && digits.startsWith('91')) return digits.slice(2);
+  // If it's an 11-digit number starting with 0, strip the 0
+  if (digits.length === 11 && digits.startsWith('0')) return digits.slice(1);
+  return digits;
+};
+
 const parseCookies = (cookieHeader: string | undefined) => {
   const cookies: Record<string, string> = {};
 
@@ -226,12 +236,23 @@ app.post('/api/auth/login', async (req, res) => {
       createdAt: FieldValue.serverTimestamp()
     }, { merge: true });
 
-    connectedClients.push({
-      phoneNumber: phone,
-      sessionToken,
-      client: pendingAuthClient,
-      messagesSent: 0
-    });
+    // Deduplicate: normalize phone to prevent +91XXXXXXXXXX and XXXXXXXXXX from being separate entries
+    const normalizedNew = normalizePhone(phone);
+    const alreadyByOtp = connectedClients.some(c => normalizePhone(c.phoneNumber) === normalizedNew);
+    if (!alreadyByOtp) {
+      connectedClients.push({
+        phoneNumber: phone,
+        sessionToken,
+        client: pendingAuthClient,
+        messagesSent: 0
+      });
+    } else {
+      const existingIdx = connectedClients.findIndex(c => normalizePhone(c.phoneNumber) === normalizedNew);
+      if (existingIdx >= 0) {
+        connectedClients[existingIdx].client = pendingAuthClient;
+        connectedClients[existingIdx].phoneNumber = phone; // keep consistent format
+      }
+    }
     pendingAuthClient = null;
     pendingPhone = null;
     setSessionCookie(res, sessionToken);
@@ -280,8 +301,11 @@ app.post('/api/auth/init', async (req, res) => {
       return res.status(401).json({ error: 'Invalid session' });
     }
 
-    // Prevent duplicate entries in connectedClients
-    const alreadyConnected = connectedClients.some(c => c.phoneNumber === (user.phoneNumber || '') || c.sessionToken === sessionToken);
+    // Prevent duplicate entries in connectedClients using normalized phone comparison
+    const normalizedInitPhone = normalizePhone(user.phoneNumber || '');
+    const alreadyConnected = connectedClients.some(c => 
+      normalizePhone(c.phoneNumber) === normalizedInitPhone || c.sessionToken === sessionToken
+    );
     if (!alreadyConnected) {
       connectedClients.push({
         phoneNumber: user.phoneNumber || '',
@@ -291,7 +315,9 @@ app.post('/api/auth/init', async (req, res) => {
       });
     } else {
       // Update the client reference in case it was stale
-      const existingIdx = connectedClients.findIndex(c => c.sessionToken === sessionToken);
+      const existingIdx = connectedClients.findIndex(c => 
+        c.sessionToken === sessionToken || normalizePhone(c.phoneNumber) === normalizedInitPhone
+      );
       if (existingIdx >= 0) {
         connectedClients[existingIdx].client = nextClient;
         connectedClients[existingIdx].messagesSent = connectedClients[existingIdx].messagesSent || 0;
@@ -345,12 +371,22 @@ app.post('/api/auth/save-session', async (req, res) => {
       createdAt: FieldValue.serverTimestamp()
     }, { merge: true });
 
-    connectedClients.push({
-      phoneNumber: phone || '',
-      sessionToken: newToken,
-      client: nextClient,
-      messagesSent: 0
-    });
+    const normalizedNew = normalizePhone(phone || '');
+    const alreadySaved = connectedClients.some(c => normalizePhone(c.phoneNumber) === normalizedNew);
+    if (!alreadySaved) {
+      connectedClients.push({
+        phoneNumber: phone || '',
+        sessionToken: newToken,
+        client: nextClient,
+        messagesSent: 0
+      });
+    } else {
+      const existingIdx = connectedClients.findIndex(c => normalizePhone(c.phoneNumber) === normalizedNew);
+      if (existingIdx >= 0) {
+        connectedClients[existingIdx].client = nextClient;
+        connectedClients[existingIdx].phoneNumber = phone || connectedClients[existingIdx].phoneNumber;
+      }
+    }
     setSessionCookie(res, newToken);
 
     res.json({
@@ -865,13 +901,21 @@ async function runCampaign() {
 }
 
 app.get('/api/accounts', (req, res) => {
+  // Deduplicate by normalized phone before sending to frontend
+  const seen = new Set<string>();
+  const uniqueClients = connectedClients.filter(c => {
+    const norm = normalizePhone(c.phoneNumber);
+    if (seen.has(norm)) return false;
+    seen.add(norm);
+    return true;
+  });
   res.json({
-    accounts: connectedClients.map((c, i) => ({
+    accounts: uniqueClients.map((c, i) => ({
       phone: c.phoneNumber,
       messagesSent: c.messagesSent || 0,
-      isActive: i === (activeAccountIndex % Math.max(1, connectedClients.length))
+      isActive: connectedClients.indexOf(c) === (activeAccountIndex % Math.max(1, connectedClients.length))
     })),
-    total: connectedClients.length
+    total: uniqueClients.length
   });
 });
 
