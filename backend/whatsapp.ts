@@ -282,6 +282,9 @@ whatsappRouter.get('/groups', async (req, res) => {
         }
 
         const chats = await activeSock.groupFetchAllParticipating();
+        if (!activeSock.user) {
+            return res.status(400).json({ error: 'WhatsApp disconnected while fetching groups' });
+        }
         const myJid = jidNormalizedUser(activeSock.user.id);
 
         const allGroups = Object.values(chats).map(g => {
@@ -358,7 +361,7 @@ whatsappRouter.post('/groups/add', async (req, res) => {
                     const result = await currentSock.groupParticipantsUpdate(groupId, batches[i], 'add');
                     const results = Array.isArray(result) ? result : [result];
                     for (const r of results) {
-                        if (r.status === '200' || r.status === 200 || r.status === 'success') {
+                        if (typeof r.status === 'string' && (r.status === '200' || r.status === 'success')) {
                             addedCount++;
                         } else {
                             failedCount++;
