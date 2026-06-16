@@ -83,8 +83,10 @@ function App() {
   const [waCode, setWaCode] = useState('');
   const [isWaConnected, setIsWaConnected] = useState(false);
   const [waGroupLink, setWaGroupLink] = useState('');
-  const [waExtractedNumbers, setWaExtractedNumbers] = useState<string[]>([]);
-  const [isWaExtracting, setIsWaExtracting] = useState(false);
+const [waExtractedNumbers, setWaExtractedNumbers] = useState<string[]>([]);
+   const [waExtractedPhoneCount, setWaExtractedPhoneCount] = useState(0);
+   const [waExtractedLidCount, setWaExtractedLidCount] = useState(0);
+   const [isWaExtracting, setIsWaExtracting] = useState(false);
   const [isWaLoading, setIsWaLoading] = useState(false);
   const [waLoginMode, setWaLoginMode] = useState<'PHONE' | 'STRING' | 'QR'>('QR');
   const [waSessionString, setWaSessionString] = useState('');
@@ -494,6 +496,8 @@ function App() {
     try {
       const res = await axios.post(`${API_URL}/whatsapp/extract-existing-group`, { groupId: waSelectedGroup });
       setWaExtractedNumbers(res.data.members);
+      setWaExtractedPhoneCount(res.data.phoneCount || 0);
+      setWaExtractedLidCount(res.data.lidCount || 0);
       alert(res.data.message || 'Extracted successfully');
     } catch (error: any) {
       alert(error.response?.data?.error || 'Failed to extract members');
@@ -519,7 +523,10 @@ function App() {
     try {
       const res = await axios.post(`${API_URL}/whatsapp/extract-group`, { link: waGroupLink.trim() });
       setWaExtractedNumbers(res.data.members || []);
-      alert(`Extracted ${res.data.participantCount} members from ${res.data.subject || 'group'}!`);
+      setWaExtractedPhoneCount(res.data.phoneCount || 0);
+      setWaExtractedLidCount(res.data.lidCount || 0);
+      const { phoneCount, lidCount } = res.data;
+      alert(`Extracted ${phoneCount} phone numbers and ${lidCount} LID-protected contacts from ${res.data.subject || 'group'}! Total: ${res.data.participantCount}`);
     } catch (error: any) {
       alert(`Extraction failed: ${error.response?.data?.error || error.message}`);
     } finally {
@@ -702,21 +709,23 @@ if (platform === 'NONE') {
               )}
             </div>
 
-            {waExtractedNumbers.length > 0 && (
-              <div className="mt-6">
-                <div className="flex justify-between items-center mb-2">
-                  <label className="text-sm text-gray-600 font-medium">Extracted Numbers ({waExtractedNumbers.length}):</label>
-                  <button onClick={copyExtractedNumbers} className="text-xs bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1 rounded font-semibold transition-colors">
-                    Copy All
-                  </button>
-                </div>
-                <textarea
-                  readOnly
-                  value={waExtractedNumbers.join('\n')}
-                  className="w-full h-48 bg-gray-50 border border-gray-300 text-gray-800 p-3 rounded-lg focus:outline-none resize-y text-sm font-mono"
-                ></textarea>
-              </div>
-            )}
+{waExtractedNumbers.length > 0 && (
+               <div className="mt-6">
+                 <div className="flex justify-between items-center mb-2">
+                   <label className="text-sm text-gray-600 font-medium">
+                     Extracted ({waExtractedNumbers.length} total - {waExtractedPhoneCount} phones, {waExtractedLidCount} LID):
+                   </label>
+                   <button onClick={copyExtractedNumbers} className="text-xs bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1 rounded font-semibold transition-colors">
+                     Copy All
+                   </button>
+                 </div>
+                 <textarea
+                   readOnly
+                   value={waExtractedNumbers.join('\n')}
+                   className="w-full h-48 bg-gray-50 border border-gray-300 text-gray-800 p-3 rounded-lg focus:outline-none resize-y text-sm font-mono"
+                 ></textarea>
+               </div>
+             )}
           </div>
 
           {!isWaConnected && (

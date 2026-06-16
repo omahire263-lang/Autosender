@@ -379,29 +379,51 @@ whatsappRouter.post('/extract-group', async (req, res) => {
         const metadata = await activeSock.groupMetadata(groupId);
         
         const participants = metadata.participants || [];
-        const phoneNumbers = participants
-            .map(p => {
-                if (!p.id || p.id.includes('@lid') || p.id.includes('@g.us')) return null;
-                const rawNumber = p.id.split('@')[0].split(':')[0];
-                if (!rawNumber || rawNumber.length < 5) return null;
-                try {
-                    const parsed = parsePhoneNumberFromString('+' + rawNumber);
-                    if (parsed) return `+${parsed.countryCallingCode} ${parsed.nationalNumber}`;
-                    return '+' + rawNumber;
-                } catch {
-                    return '+' + rawNumber;
+        
+        // Separate phone numbers and LID-based contacts
+        const phoneNumbers: string[] = [];
+        const lidContacts: string[] = [];
+        
+        for (const p of participants) {
+            if (!p.id) continue;
+            
+            if (p.id.includes('@lid')) {
+                // LID-based contact - WhatsApp privacy protected, but still usable for messaging
+                lidContacts.push(p.id);
+                continue;
+            }
+            
+            if (p.id.includes('@g.us')) continue;
+            
+            const rawNumber = p.id.split('@')[0].split(':')[0];
+            if (!rawNumber || rawNumber.length < 5) continue;
+            
+            try {
+                const parsed = parsePhoneNumberFromString('+' + rawNumber);
+                if (parsed) {
+                    phoneNumbers.push(`+${parsed.countryCallingCode} ${parsed.nationalNumber}`);
+                } else {
+                    phoneNumbers.push('+' + rawNumber);
                 }
-            })
-            .filter((phone): phone is string => phone !== null);
+            } catch {
+                phoneNumbers.push('+' + rawNumber);
+            }
+        }
+
+        // Note: LID contacts hide phone numbers per WhatsApp privacy
+        // We can still message them directly using their LID ID
 
         // Send the response back to the user immediately
+        const allContacts = [...phoneNumbers, ...lidContacts];
         res.json({
             success: true,
             groupId,
             subject: metadata.subject,
-            participantCount: phoneNumbers.length,
-            members: phoneNumbers,
-            message: "Data extracted. The bot will safely leave the group in a few seconds."
+            participantCount: allContacts.length,
+            phoneCount: phoneNumbers.length,
+            lidCount: lidContacts.length,
+            members: allContacts,
+            message: `Extracted ${phoneNumbers.length} phone numbers. ${lidContacts.length} contacts are LID-protected (WhatsApp privacy). All ${allContacts.length} can receive messages.`
         });
 
         // Anti-ban: Automatically leave the group so it doesn't clutter the user's personal WhatsApp
@@ -479,28 +501,55 @@ whatsappRouter.post('/extract-existing-group', async (req, res) => {
         console.log(`Got ${participants.length} raw participants for "${subject}"`);
         // Debug: log first few IDs to check format
         participants.slice(0, 5).forEach(p => console.log('  participant id:', p.id));
-        const phoneNumbers = participants
-            .map(p => {
-                if (!p.id || p.id.includes('@lid') || p.id.includes('@g.us')) return null;
-                const rawNumber = p.id.split('@')[0].split(':')[0];
-                if (!rawNumber || rawNumber.length < 5) return null;
-                try {
-                    const parsed = parsePhoneNumberFromString('+' + rawNumber);
-                    if (parsed) return `+${parsed.countryCallingCode} ${parsed.nationalNumber}`;
-                    return '+' + rawNumber;
-                } catch {
-                    return '+' + rawNumber;
+        
+        // Separate phone numbers and LID-based contacts
+        const phoneNumbers: string[] = [];
+        const lidContacts: string[] = [];
+        
+        for (const p of participants) {
+            if (!p.id) continue;
+            
+            if (p.id.includes('@lid')) {
+                // LID-based contact - WhatsApp privacy protected, but still usable for messaging
+                lidContacts.push(p.id);
+                continue;
+            }
+            
+            if (p.id.includes('@g.us')) continue;
+            
+            const rawNumber = p.id.split('@')[0].split(':')[0];
+            if (!rawNumber || rawNumber.length < 5) continue;
+            
+            try {
+                const parsed = parsePhoneNumberFromString('+' + rawNumber);
+                if (parsed) {
+                    phoneNumbers.push(`+${parsed.countryCallingCode} ${parsed.nationalNumber}`);
+                } else {
+                    phoneNumbers.push('+' + rawNumber);
                 }
-            })
-            .filter((phone): phone is string => phone !== null);
+            } catch {
+                phoneNumbers.push('+' + rawNumber);
+            }
+        }
+
+        // Note: LID contacts hide phone numbers per WhatsApp privacy
+        // We can still message them directly using their LID ID
+
+        const allContacts = [...phoneNumbers, ...lidContacts];
 
         res.json({
             success: true,
             groupId,
             subject: subject,
-            participantCount: phoneNumbers.length,
-            members: phoneNumbers,
-            message: phoneNumbers.length > 0 ? `Extracted ${phoneNumbers.length} members successfully.` : "Extracted 0 members. Numbers might be hidden by WhatsApp privacy settings."
+            participantCount: allContacts.length,
+            phoneCount: phoneNumbers.length,
+            lidCount: lidContacts.length,
+            members: allContacts,
+            message: phoneNumbers.length > 0 
+                ? `Extracted ${phoneNumbers.length} phone numbers and ${lidContacts.length} LID-protected contacts. All can receive messages.` 
+                : lidContacts.length > 0 
+                    ? `Extracted ${lidContacts.length} LID-protected contacts. WhatsApp privacy settings hide numbers, but these contacts can still receive messages.`
+                    : "Extracted 0 members. Numbers might be hidden by WhatsApp privacy settings."
         });
     } catch (e: any) {
         console.error('Error extracting existing group members:', e);
