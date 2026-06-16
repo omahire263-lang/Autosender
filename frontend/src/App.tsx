@@ -92,6 +92,9 @@ function App() {
   const [waQr, setWaQr] = useState<string | null>(null);
   const [isWaQrLoading, setIsWaQrLoading] = useState(false);
   const waQrPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [waJoinedGroups, setWaJoinedGroups] = useState<{id: string, subject: string, participantCount: number}[]>([]);
+  const [waSelectedGroup, setWaSelectedGroup] = useState('');
+  const [isWaGroupsLoading, setIsWaGroupsLoading] = useState(false);
 
   const fetchGroups = useCallback(async () => {
     setIsGroupsLoading(true);
@@ -460,6 +463,37 @@ function App() {
     }
   };
 
+  const fetchWaGroups = async () => {
+    setIsWaGroupsLoading(true);
+    try {
+      const res = await axios.get(`${API_URL}/whatsapp/groups`);
+      setWaJoinedGroups(res.data.groups);
+      if (res.data.groups.length > 0) setWaSelectedGroup(res.data.groups[0].id);
+    } catch (error: any) {
+      alert(error.response?.data?.error || 'Failed to fetch WhatsApp groups');
+    } finally {
+      setIsWaGroupsLoading(false);
+    }
+  };
+
+  const extractWaExistingGroupMembers = async () => {
+    if (!waSelectedGroup) {
+      alert('Please select a group first');
+      return;
+    }
+    setIsWaExtracting(true);
+    setWaExtractedNumbers([]);
+    try {
+      const res = await axios.post(`${API_URL}/whatsapp/extract-existing-group`, { groupId: waSelectedGroup });
+      setWaExtractedNumbers(res.data.members);
+      alert(res.data.message || 'Extracted successfully');
+    } catch (error: any) {
+      alert(error.response?.data?.error || 'Failed to extract members');
+    } finally {
+      setIsWaExtracting(false);
+    }
+  };
+
   const copyWaSessionString = async () => {
     try {
       const res = await axios.get<{sessionString: string}>(`${API_URL}/whatsapp/auth/session-string`);
@@ -594,7 +628,7 @@ if (platform === 'NONE') {
           <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col md:col-span-2 max-w-2xl mx-auto w-full">
             <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-gray-900"><Users className="text-green-500" /> Extract Group Members</h2>
             
-            <label className="block text-sm text-gray-600 mb-2 font-medium">WhatsApp Group Invite Link:</label>
+            <label className="block text-sm text-gray-600 mb-2 font-medium">1. Extract via Invite Link:</label>
             <input
               type="text"
               value={waGroupLink} onChange={e => setWaGroupLink(e.target.value)}
@@ -605,10 +639,44 @@ if (platform === 'NONE') {
             <button 
               onClick={extractWaGroupMembers} 
               disabled={isWaExtracting}
-              className="w-full bg-green-600 hover:bg-green-700 text-white p-4 rounded-lg font-bold transition-colors shadow-sm disabled:opacity-50 flex justify-center items-center gap-2"
+              className="w-full bg-green-600 hover:bg-green-700 text-white p-4 rounded-lg font-bold transition-colors shadow-sm disabled:opacity-50 flex justify-center items-center gap-2 mb-8"
             >
-              {isWaExtracting ? 'Extracting...' : 'Extract Members'}
+              {isWaExtracting ? 'Extracting...' : 'Extract from Link'}
             </button>
+
+            <div className="border-t border-gray-200 pt-6">
+              <div className="flex justify-between items-center mb-4">
+                <label className="block text-sm text-gray-600 font-medium">2. Extract from Already Joined Groups:</label>
+                <button onClick={fetchWaGroups} disabled={isWaGroupsLoading} className="text-sm bg-gray-200 hover:bg-gray-300 px-3 py-1 rounded-md font-semibold transition-colors disabled:opacity-50">
+                  {isWaGroupsLoading ? 'Fetching...' : 'Load Joined Groups'}
+                </button>
+              </div>
+              
+              {waJoinedGroups.length > 0 ? (
+                <>
+                  <select
+                    value={waSelectedGroup}
+                    onChange={(e) => setWaSelectedGroup(e.target.value)}
+                    className="w-full bg-gray-100 border border-gray-300 text-gray-900 p-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 mb-4"
+                  >
+                    {waJoinedGroups.map(g => (
+                      <option key={g.id} value={g.id}>{g.subject} ({g.participantCount} members)</option>
+                    ))}
+                  </select>
+                  <button 
+                    onClick={extractWaExistingGroupMembers} 
+                    disabled={isWaExtracting}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-lg font-bold transition-colors shadow-sm disabled:opacity-50 flex justify-center items-center gap-2"
+                  >
+                    {isWaExtracting ? 'Extracting...' : 'Extract from Selected Group'}
+                  </button>
+                </>
+              ) : (
+                <div className="text-center p-4 bg-gray-50 text-gray-500 rounded-lg text-sm border border-dashed border-gray-300">
+                  Click "Load Joined Groups" to fetch groups the bot is already in.
+                </div>
+              )}
+            </div>
 
             {waExtractedNumbers.length > 0 && (
               <div className="mt-6">

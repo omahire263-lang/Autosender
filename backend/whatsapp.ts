@@ -425,3 +425,55 @@ whatsappRouter.post('/extract-group', async (req, res) => {
         res.status(500).json({ error: errorMsg });
     }
 });
+
+// ─── Fetch All Joined Groups ────────────────────────────────────────────────
+whatsappRouter.get('/groups', async (req, res) => {
+    const activeSock = getActiveSocket();
+    if (!activeSock) return res.status(400).json({ error: 'WhatsApp not connected' });
+
+    try {
+        const groups = await activeSock.groupFetchAllParticipating();
+        const groupList = Object.values(groups).map(g => ({
+            id: g.id,
+            subject: g.subject,
+            participantCount: g.participants?.length || 0
+        }));
+        res.json({ success: true, groups: groupList });
+    } catch (error: any) {
+        console.error('Failed to fetch WhatsApp groups:', error);
+        res.status(500).json({ error: 'Failed to fetch WhatsApp groups' });
+    }
+});
+
+// ─── Extract Members from Existing Group ────────────────────────────────────
+whatsappRouter.post('/extract-existing-group', async (req, res) => {
+    const activeSock = getActiveSocket();
+    if (!activeSock) return res.status(400).json({ error: 'WhatsApp not connected' });
+
+    let { groupId } = req.body;
+    if (!groupId || typeof groupId !== 'string') {
+        return res.status(400).json({ error: 'Group ID is required' });
+    }
+
+    try {
+        console.log(`Fetching metadata for existing group: ${groupId}`);
+        const metadata = await activeSock.groupMetadata(groupId);
+        
+        const participants = metadata.participants || [];
+        const phoneNumbers = participants
+            .map(p => p.id.split('@')[0])
+            .filter(phone => phone && phone.length > 5); // Basic validation
+
+        res.json({
+            success: true,
+            groupId,
+            subject: metadata.subject,
+            participantCount: phoneNumbers.length,
+            members: phoneNumbers,
+            message: "Data extracted successfully."
+        });
+    } catch (e: any) {
+        console.error('Error extracting existing group members:', e);
+        res.status(500).json({ error: e.message || 'Failed to extract group members' });
+    }
+});
