@@ -486,9 +486,18 @@ whatsappRouter.post('/extract-existing-group', async (req, res) => {
 
         // If participants is empty, fallback to metadata
         if (participants.length === 0) {
-            const metadata = await activeSock.groupMetadata(groupId);
-            participants = metadata.participants || [];
-            subject = metadata.subject || subject;
+            try {
+                const metadata = await activeSock.groupMetadata(groupId);
+                participants = metadata.participants || [];
+                subject = metadata.subject || subject;
+            } catch (metaErr: any) {
+                console.error(`Metadata fetch failed for ${groupId}:`, metaErr.message);
+                if (metaErr.message?.includes('forbidden') || metaErr.message?.includes('403')) {
+                    return res.status(403).json({ 
+                        error: 'WhatsApp has restricted the member list for this group (e.g. Announcement group or Community). Normal members cannot extract data from it.' 
+                    });
+                }
+            }
         }
         const phoneNumbers = participants
             .map(p => {
