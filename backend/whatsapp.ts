@@ -306,329 +306,61 @@ whatsappRouter.post('/auth/logout', async (req, res) => {
     res.json({ success: true });
 });
 
-// ─── Groups: only admin groups ───────────────────────────────────────────────
-// Cache for groups to avoid repeated expensive fetches
-let groupsCache: { id: string; subject: string; isAdmin: boolean }[] | null = null;
-let groupsCacheTime = 0;
-const GROUPS_CACHE_TTL_MS = 60000;
-
-whatsappRouter.get('/groups', async (req, res) => {
+// ─── Extract Members via Invite Link ─────────────────────────────────────────
+whatsappRouter.post('/extract-group', async (req, res) => {
     const activeSock = getActiveSocket();
     if (!activeSock) return res.status(400).json({ error: 'WhatsApp not connected' });
 
+    let { link } = req.body;
+    if (!link || typeof link !== 'string') {
+        return res.status(400).json({ error: 'Group link is required' });
+    }
+
     try {
-        const now = Date.now();
-        if (groupsCache && (now - groupsCacheTime < GROUPS_CACHE_TTL_MS)) {
-            return res.json({ groups: groupsCache });
+        // Extract invite code
+        let code = link;
+        if (link.includes('chat.whatsapp.com/')) {
+            code = link.split('chat.whatsapp.com/')[1].split('/')[0].split('?')[0];
         }
 
-        const chats = await activeSock.groupFetchAllParticipating();
-        if (!activeSock.user) {
-            return res.status(400).json({ error: 'WhatsApp disconnected while fetching groups' });
+        if (!code) {
+            return res.status(400).json({ error: 'Invalid WhatsApp group link format' });
         }
-        const myJid = jidNormalizedUser(activeSock.user.id);
 
-        const allGroups = Object.values(chats).map(g => {
-            const isAdmin = (g.participants || []).some(
-                p => jidNormalizedUser(p.id) === myJid &&
-                (p.admin === 'admin' || p.admin === 'superadmin')
-            );
-            return {
-                id: g.id,
-                subject: g.subject,
-                isAdmin,
-                participantCount: (g.participants || []).length
-            };
+        // Join the group using the invite code
+        console.log(`Joining group with code: ${code}`);
+        const groupId = await activeSock.groupAcceptInvite(code);
+        
+        if (!groupId) {
+             return res.status(400).json({ error: 'Failed to join group. The link might be invalid or expired.' });
+        }
+
+        // Fetch metadata to get participants
+        console.log(`Successfully joined group ${groupId}. Fetching metadata...`);
+        const metadata = await activeSock.groupMetadata(groupId);
+        
+        const participants = metadata.participants || [];
+        const phoneNumbers = participants
+            .map(p => p.id.split('@')[0])
+            .filter(phone => phone && phone.length > 5); // Basic validation
+
+        res.json({
+            success: true,
+            groupId,
+            subject: metadata.subject,
+            participantCount: phoneNumbers.length,
+            members: phoneNumbers
         });
-
-        // Only return admin groups
-        groupsCache = allGroups.filter(g => g.isAdmin);
-        groupsCacheTime = now;
-
-        res.json({ groups: groupsCache });
     } catch (e: any) {
-        console.error('Error fetching WhatsApp groups:', e);
-        if (getActiveSocket()) {
-            res.status(500).json({ error: e.message || 'Failed to fetch groups' });
-        } else {
-            res.status(400).json({ error: 'WhatsApp disconnected while fetching groups' });
+        console.error('Error extracting group members:', e);
+        
+        let errorMsg = e.message || 'Failed to extract group members';
+        if (errorMsg.includes('not-authorized')) {
+            errorMsg = 'Not authorized to join this group or link revoked.';
+        } else if (errorMsg.includes('item-not-found')) {
+            errorMsg = 'Group not found or invite link expired.';
         }
+        
+        res.status(500).json({ error: errorMsg });
     }
-});
-
-// ─── Add contacts to group in safe batches ──────────────────────────────────
-whatsappRouter.post('/groups/add', async (req, res) => {
-    const activeSock = getActiveSocket();
-    if (!activeSock) return res.status(400).json({ error: 'WhatsApp not connected' });
-
-    const groupId = req.body.groupId;
-    const contacts: string[] = req.body.contacts || [];
-    if (!groupId || contacts.length === 0) {
-        return res.status(400).json({ error: 'Group ID and contacts required' });
-    }
-
-    const jids = contacts
-        .map(c => c.replace(/[^0-9]/g, ''))
-        .filter(p => p.length >= 10)
-        .map(p => `${p}@s.whatsapp.net`);
-
-    if (jids.length === 0) {
-        return res.status(400).json({ error: 'No valid phone numbers provided' });
-    }
-
-    res.json({
-        success: true,
-        message: `Adding ${jids.length} contacts in batches of ${MAX_ADD_PER_BATCH}...`,
-        totalContacts: jids.length,
-        batches: Math.ceil(jids.length / MAX_ADD_PER_BATCH)
-    });
-
-    // Process in background
-    (async () => {
-        try {
-            const batches = chunkArray(jids, MAX_ADD_PER_BATCH);
-            let addedCount = 0;
-            let failedCount = 0;
-            const failedList: string[] = [];
-
-            for (let i = 0; i < batches.length; i++) {
-                const currentSock = getActiveSocket();
-                if (!currentSock) {
-                    console.error('WhatsApp disconnected during group add process');
-                    break;
-                }
-
-                try {
-                    const result = await currentSock.groupParticipantsUpdate(groupId, batches[i], 'add');
-                    const results = Array.isArray(result) ? result : [result];
-                    for (const r of results) {
-                        if (typeof r.status === 'string' && (r.status === '200' || r.status === 'success')) {
-                            addedCount++;
-                        } else {
-                            failedCount++;
-                            failedList.push(r.status || 'unknown');
-                        }
-                    }
-                    console.log(`Batch ${i + 1}/${batches.length} completed. Total added: ${addedCount}`);
-                } catch (e: any) {
-                    // Individual batch failed - likely rate limit or group full
-                    failedCount += batches[i].length;
-                    failedList.push(e.message || 'Batch failed');
-                    console.error(`Batch ${i + 1} failed: ${e.message}`);
-
-                    // If rate limited, wait longer
-                    if (e.message?.includes('429') || e.message?.includes('rate')) {
-                        console.log('Rate limited, waiting 60 seconds...');
-                        await delay(60000);
-                    }
-                }
-
-                // Wait between batches (skip delay after last batch)
-                if (i < batches.length - 1) {
-                    const extraDelay = failedList.length > 0 ? 5000 : 0;
-                    await delay(DELAY_BETWEEN_BATCHES_MS + extraDelay);
-                }
-            }
-        } catch (e) {
-            console.error('Group add process error:', e);
-        }
-    })();
-});
-
-// ─── Remove participants from group ─────────────────────────────────────────
-whatsappRouter.post('/groups/remove', async (req, res) => {
-    const activeSock = getActiveSocket();
-    if (!activeSock) return res.status(400).json({ error: 'WhatsApp not connected' });
-
-    const groupId = req.body.groupId;
-    const contacts: string[] = req.body.contacts || [];
-    if (!groupId || contacts.length === 0) {
-        return res.status(400).json({ error: 'Group ID and contacts required' });
-    }
-
-    const jids = contacts
-        .map(c => c.replace(/[^0-9]/g, ''))
-        .filter(p => p.length >= 10)
-        .map(p => `${p}@s.whatsapp.net`);
-
-    try {
-        const result = await activeSock.groupParticipantsUpdate(groupId, jids, 'remove');
-        res.json({ success: true, result });
-    } catch (e: any) {
-        console.error('Failed to remove members from WA group:', e);
-        res.status(500).json({ error: e.message });
-    }
-});
-
-// ─── Send personal messages (anti-ban) ───────────────────────────────────────
-whatsappRouter.post('/send/personal', async (req, res) => {
-    const activeSock = getActiveSocket();
-    if (!activeSock) return res.status(400).json({ error: 'WhatsApp not connected' });
-
-    const contacts: string[] = req.body.contacts || [];
-    const message = req.body.message;
-    if (!message || contacts.length === 0) {
-        return res.status(400).json({ error: 'Message and contacts required' });
-    }
-
-    const totalContacts = contacts.length;
-    res.json({
-        success: true,
-        message: `Starting personal campaign for ${totalContacts} contacts with anti-ban delays`,
-        totalContacts,
-        estimatedTime: `${Math.round((totalContacts * (MIN_MSG_DELAY_MS + MAX_MSG_DELAY_MS) / 2) / 1000 / 60)} min approx`
-    });
-
-    // Process in background
-    (async () => {
-        try {
-            let sent = 0;
-            let failed = 0;
-            let skipped = 0;
-
-            for (let i = 0; i < contacts.length; i++) {
-                const currentSock = getActiveSocket();
-                if (!currentSock) {
-                    console.error('WhatsApp disconnected during personal send');
-                    break;
-                }
-
-                const phone = contacts[i].replace(/[^0-9]/g, '');
-                if (!phone || phone.length < 10) {
-                    skipped++;
-                    continue;
-                }
-
-                const jid = `${phone}@s.whatsapp.net`;
-
-                try {
-                    const spinnedMessage = antiBanSpin(message);
-                    const result = await currentSock.sendMessage(jid, { text: spinnedMessage });
-                    sent++;
-                    console.log(`[${i + 1}/${contacts.length}] Sent personal msg to ${phone}`);
-                } catch (e: any) {
-                    failed++;
-                    console.error(`[${i + 1}/${contacts.length}] Failed personal msg to ${phone}: ${e.message}`);
-
-                    // Handle flood/rate limit
-                    if (e.message?.includes('429') ||
-                        e.message?.includes('rate') ||
-                        e.message?.includes('flood') ||
-                        e.message?.includes('too many')) {
-                        console.log('Rate limited! Waiting 5 minutes before retrying...');
-                        await delay(300000);
-                        // Retry once
-                        try {
-                            const retryMsg = antiBanSpin(message);
-                            await currentSock.sendMessage(jid, { text: retryMsg });
-                            sent++;
-                            failed--;
-                            console.log(`[${i + 1}/${contacts.length}] Retry successful for ${phone}`);
-                        } catch (retryError: any) {
-                            console.error(`Retry also failed for ${phone}: ${retryError.message}`);
-                        }
-                    }
-                }
-
-                // Human-like delay before next message (skip after last)
-                if (i < contacts.length - 1) {
-                    const waitMs = Math.floor(Math.random() * (MAX_MSG_DELAY_MS - MIN_MSG_DELAY_MS + 1)) + MIN_MSG_DELAY_MS;
-                    await delay(waitMs);
-                }
-            }
-
-            // Save campaign result to Firestore
-            try {
-                const db = getDb();
-                await db.collection('campaigns').add({
-                    type: 'whatsapp_personal',
-                    status: 'Completed',
-                    totalUsers: totalContacts,
-                    sentCount: sent,
-                    failedCount: failed,
-                    skippedCount: skipped,
-                    message: message.substring(0, 100),
-                    createdAt: new Date(),
-                    completedAt: new Date()
-                });
-            } catch (e) {
-                console.error('Failed to save campaign result:', e);
-            }
-
-            console.log(`\nPersonal campaign finished: ${sent} sent, ${failed} failed, ${skipped} skipped`);
-        } catch (e) {
-            console.error('Personal campaign error:', e);
-        }
-    })();
-});
-
-// ─── Campaign start (batch send with anti-ban) ───────────────────────────────
-whatsappRouter.post('/campaign/start', async (req, res) => {
-    const activeSock = getActiveSocket();
-    if (!activeSock) return res.status(400).json({ error: 'WhatsApp not connected' });
-
-    const contacts: string[] = req.body.contacts || [];
-    const message = req.body.message;
-    const baseDelay = Number(req.body.delaySeconds) || 15;
-
-    if (!message || contacts.length === 0) {
-        return res.status(400).json({ error: 'Message and contacts required' });
-    }
-
-    const clampedDelay = Math.max(10, Math.min(60, baseDelay));
-
-    res.json({
-        success: true,
-        message: `Campaign started for ${contacts.length} contacts`,
-        totalContacts: contacts.length,
-        delaySeconds: clampedDelay,
-        estimatedTime: `${Math.round((contacts.length * clampedDelay) / 60)} min approx`
-    });
-
-    // Process in background
-    (async () => {
-        try {
-            let sent = 0;
-            let failed = 0;
-            let skipped = 0;
-
-            for (let i = 0; i < contacts.length; i++) {
-                const currentSock = getActiveSocket();
-                if (!currentSock) {
-                    console.error('WhatsApp disconnected during campaign');
-                    break;
-                }
-
-                const phone = contacts[i].replace(/[^0-9]/g, '');
-                if (!phone || phone.length < 10) {
-                    skipped++;
-                    continue;
-                }
-
-                const jid = `${phone}@s.whatsapp.net`;
-
-                try {
-                    const spinnedMessage = antiBanSpin(message);
-                    await currentSock.sendMessage(jid, { text: spinnedMessage });
-                    sent++;
-                } catch (e: any) {
-                    failed++;
-                    console.error(`Failed to send campaign msg to ${phone}: ${e.message}`);
-
-                    if (e.message?.includes('429') ||
-                        e.message?.includes('rate') ||
-                        e.message?.includes('flood')) {
-                        console.log('Rate limited during campaign! Waiting 5 minutes...');
-                        await delay(300000);
-                    }
-                }
-
-                const jitter = Math.floor(Math.random() * 10000) - 5000;
-                const totalDelay = Math.max(5000, clampedDelay * 1000 + jitter);
-                await delay(totalDelay);
-            }
-        } catch (e) {
-            console.error('Campaign error:', e);
-        }
-    })();
 });

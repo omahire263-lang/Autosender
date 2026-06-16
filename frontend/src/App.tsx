@@ -81,12 +81,10 @@ function App() {
   const [waPhone, setWaPhone] = useState('');
   const [waCode, setWaCode] = useState('');
   const [isWaConnected, setIsWaConnected] = useState(false);
-  const [waGroups, setWaGroups] = useState<{id: string, subject: string, isAdmin: boolean}[]>([]);
-  const [waSelectedGroup, setWaSelectedGroup] = useState('');
-  const [waContactsStr, setWaContactsStr] = useState('');
-  const [waMessage, setWaMessage] = useState('Hello from WhatsApp Automation!');
+  const [waGroupLink, setWaGroupLink] = useState('');
+  const [waExtractedNumbers, setWaExtractedNumbers] = useState<string[]>([]);
+  const [isWaExtracting, setIsWaExtracting] = useState(false);
   const [isWaLoading, setIsWaLoading] = useState(false);
-  const [isGroupsRefreshing, setIsGroupsRefreshing] = useState(false);
   const [waLoginMode, setWaLoginMode] = useState<'PHONE' | 'STRING'>('PHONE');
   const [waSessionString, setWaSessionString] = useState('');
   const [isWaStringLoading, setIsWaStringLoading] = useState(false);
@@ -138,26 +136,10 @@ function App() {
     try {
       const res = await axios.get<{ isConnected: boolean }>(`${API_URL}/whatsapp/status`);
       setIsWaConnected(res.data.isConnected);
-      if (res.data.isConnected) {
-        const grpRes = await axios.get<{ groups: {id: string, subject: string, isAdmin: boolean}[] }>(`${API_URL}/whatsapp/groups`);
-        setWaGroups(grpRes.data.groups || []);
-      }
     } catch (error) {
       console.error(error);
     }
   }, []);
-
-  const refreshWaGroups = async () => {
-    setIsGroupsRefreshing(true);
-    try {
-      const grpRes = await axios.get<{ groups: {id: string, subject: string, isAdmin: boolean}[] }>(`${API_URL}/whatsapp/groups`);
-      setWaGroups(grpRes.data.groups || []);
-    } catch (error: any) {
-      alert(`Failed to load groups: ${error.response?.data?.error || error.message}`);
-    } finally {
-      setIsGroupsRefreshing(false);
-    }
-  };
 
   const initSession = useCallback(async () => {
     setIsLoading(true);
@@ -452,25 +434,28 @@ function App() {
     }
   };
 
-  const startWaCampaign = async () => {
-    const contacts = waContactsStr.split(/[\n,]+/).map(c => c.trim()).filter(c => c);
-    if (!contacts.length) return alert('No contacts found');
+  const extractWaGroupMembers = async () => {
+    if (!waGroupLink.trim()) return alert('Please enter a group link');
+    setIsWaExtracting(true);
+    setWaExtractedNumbers([]);
     try {
-      await axios.post(`${API_URL}/whatsapp/campaign/start`, { contacts, message: waMessage });
-      alert('WhatsApp Campaign started!');
-    } catch (error) {
-      alert(getErrorMessage(error, 'Failed'));
+      const res = await axios.post(`${API_URL}/whatsapp/extract-group`, { link: waGroupLink.trim() });
+      setWaExtractedNumbers(res.data.members || []);
+      alert(`Extracted ${res.data.participantCount} members from ${res.data.subject || 'group'}!`);
+    } catch (error: any) {
+      alert(`Extraction failed: ${error.response?.data?.error || error.message}`);
+    } finally {
+      setIsWaExtracting(false);
     }
   };
 
-  const addWaGroupMembers = async () => {
-    const contacts = waContactsStr.split(/[\n,]+/).map(c => c.trim()).filter(c => c);
-    if (!contacts.length || !waSelectedGroup) return alert('Select group and enter contacts');
+  const copyExtractedNumbers = async () => {
+    if (!waExtractedNumbers.length) return;
     try {
-      await axios.post(`${API_URL}/whatsapp/groups/add`, { groupId: waSelectedGroup, contacts });
-      alert('Members added to WhatsApp group successfully!');
-    } catch (error) {
-      alert(getErrorMessage(error, 'Failed to add members'));
+      await navigator.clipboard.writeText(waExtractedNumbers.join('\n'));
+      alert('Numbers copied to clipboard!');
+    } catch (err) {
+      alert('Failed to copy numbers');
     }
   };
 
@@ -562,51 +547,40 @@ if (platform === 'NONE') {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col">
-                <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-gray-900"><Users className="text-green-500" /> Contacts & Groups</h2>
+              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col md:col-span-2 max-w-2xl mx-auto w-full">
+                <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-gray-900"><Users className="text-green-500" /> Extract Group Members</h2>
                 
-                <label className="block text-sm text-gray-600 mb-2 font-medium">Paste Numbers (one per line or comma-separated):</label>
-                <textarea
-                  value={waContactsStr} onChange={e => setWaContactsStr(e.target.value)}
-                  className="w-full h-32 bg-gray-100 border border-gray-300 text-gray-900 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 mb-4 resize-none text-sm"
-                  placeholder="+919876543210&#10;+1234567890"></textarea>
+                <label className="block text-sm text-gray-600 mb-2 font-medium">WhatsApp Group Invite Link:</label>
+                <input
+                  type="text"
+                  value={waGroupLink} onChange={e => setWaGroupLink(e.target.value)}
+                  className="w-full bg-gray-100 border border-gray-300 text-gray-900 p-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 mb-4"
+                  placeholder="https://chat.whatsapp.com/..."
+                />
 
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm text-gray-600 font-medium">Select Your Admin Group:</label>
-                  <button
-                    onClick={refreshWaGroups}
-                    disabled={isGroupsRefreshing}
-                    className="text-xs text-green-600 hover:text-green-800 font-semibold flex items-center gap-1 disabled:opacity-50"
-                  >
-                    {isGroupsRefreshing ? 'Loading...' : '🔄 Refresh Groups'}
-                  </button>
-                </div>
-                <select 
-                  value={waSelectedGroup} onChange={e => setWaSelectedGroup(e.target.value)}
-                  className="w-full bg-gray-100 border border-gray-300 text-gray-900 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 mb-4"
+                <button 
+                  onClick={extractWaGroupMembers} 
+                  disabled={isWaExtracting}
+                  className="w-full bg-green-600 hover:bg-green-700 text-white p-4 rounded-lg font-bold transition-colors shadow-sm disabled:opacity-50 flex justify-center items-center gap-2"
                 >
-                  <option value="">-- Select Group --</option>
-                  {waGroups.map(g => (
-                    <option key={g.id} value={g.id}>👑 {g.subject}</option>
-                  ))}
-                </select>
-
-                <button onClick={addWaGroupMembers} className="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-lg font-bold transition-colors shadow-sm">
-                  Add Contacts to Group
+                  {isWaExtracting ? 'Extracting...' : 'Extract Members'}
                 </button>
-              </div>
 
-              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col">
-                <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-gray-900"><Edit3 className="text-green-500" /> Message Campaign</h2>
-                
-                <textarea
-                  value={waMessage} onChange={e => setWaMessage(e.target.value)}
-                  className="w-full h-32 bg-gray-100 border border-gray-300 text-gray-900 p-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 mb-4 resize-none"
-                  placeholder="Type your WhatsApp message..."></textarea>
-
-                <button onClick={startWaCampaign} className="w-full flex items-center justify-center gap-2 bg-green-600 text-white hover:bg-green-700 px-8 py-3 rounded-xl font-bold text-lg transition-all shadow-md">
-                  <Play fill="currentColor" /> Send Message to Contacts
-                </button>
+                {waExtractedNumbers.length > 0 && (
+                  <div className="mt-6">
+                    <div className="flex justify-between items-center mb-2">
+                      <label className="text-sm text-gray-600 font-medium">Extracted Numbers ({waExtractedNumbers.length}):</label>
+                      <button onClick={copyExtractedNumbers} className="text-xs bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1 rounded font-semibold transition-colors">
+                        Copy All
+                      </button>
+                    </div>
+                    <textarea
+                      readOnly
+                      value={waExtractedNumbers.join('\n')}
+                      className="w-full h-48 bg-gray-50 border border-gray-300 text-gray-800 p-3 rounded-lg focus:outline-none resize-y text-sm font-mono"
+                    ></textarea>
+                  </div>
+                )}
               </div>
             </div>
           </div>
