@@ -216,7 +216,34 @@ app.post('/api/auth/login', async (req, res) => {
     } catch (error: any) {
       let errMsg = getErrorMessage(error);
       if (errMsg.includes('AUTH_KEY_DUPLICATED')) {
-        errMsg = 'Session is already active elsewhere. Stop the other instance first.';
+        // Session is active on another instance — try to recover from Firestore
+        try {
+          const db = getDb();
+          const snapshot = await db.collection('users').where('sessionString', '==', sessionString).limit(1).get();
+          if (!snapshot.empty) {
+            const userData = snapshot.docs[0].data();
+            const existingToken = userData.sessionToken as string;
+            const storedSession = userData.sessionString as string;
+            const stringSession2 = new StringSession(storedSession);
+            const recoveredClient = new TelegramClient(stringSession2, apiId, apiHash, { connectionRetries: 3 });
+            await recoveredClient.connect();
+            const me2 = await recoveredClient.getMe();
+            // Add to connectedClients if not present
+            const alreadyIn = connectedClients.some(c => c.sessionToken === existingToken);
+            if (!alreadyIn) {
+              connectedClients.push({ phoneNumber: phone || '', sessionToken: existingToken, client: recoveredClient, messagesSent: 0 });
+            }
+            setSessionCookie(res, existingToken);
+            return res.json({
+              success: true,
+              user: (me2 as any)?.username || (me2 as any)?.firstName || 'User',
+              token: existingToken
+            });
+          }
+        } catch (recoverErr) {
+          console.error('AUTH_KEY_DUPLICATED recovery failed:', recoverErr);
+        }
+        errMsg = 'Session conflict. Please wait 30 seconds and try again.';
       }
       res.status(400).json({ error: errMsg });
     }

@@ -135,28 +135,37 @@ export async function initWhatsApp() {
             logger,
             browser: ['Ubuntu', 'Chrome', '20.0.04'],
             syncFullHistory: false,
-            markOnlineOnConnect: false
+            markOnlineOnConnect: false,
+            keepAliveIntervalMs: 30000,
+            retryRequestDelayMs: 250,
+            generateHighQualityLinkPreview: false
         });
 
         sock.ev.on('creds.update', saveCreds);
 
         sock.ev.on('connection.update', (update) => {
             const { connection, lastDisconnect, qr } = update;
-            if (qr) currentQr = qr;
+            if (qr) {
+                currentQr = qr;
+                isInitializing = false; // allow re-init if needed
+            }
             if (connection === 'close') {
                 const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
+                isInitializing = false;
                 if (statusCode === DisconnectReason.loggedOut) {
                     sock = null;
-                    isInitializing = false;
+                    currentQr = null;
                     getDb().collection('whatsapp_sessions').doc(WA_SESSION_DOC).delete()
                         .then(() => console.log('WhatsApp session cleared from Firestore'))
                         .catch(console.error);
                 } else {
-                    console.log('WhatsApp temporarily disconnected, Baileys will auto-reconnect...');
-                    isInitializing = false;
+                    console.log('WhatsApp temporarily disconnected, will retry...');
+                    sock = null;
+                    setTimeout(() => { if (!sock && !isInitializing) initWhatsApp(); }, 3000);
                 }
             } else if (connection === 'open') {
                 console.log('WhatsApp connected successfully!');
+                currentQr = null;
                 isInitializing = false;
             }
         });
